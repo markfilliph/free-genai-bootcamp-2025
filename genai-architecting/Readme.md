@@ -13,3 +13,7 @@ We are assuming that the Open-source LLMs that we choose will be powerful enough
 ## Data Strategy
 
 There is a concern of copyrighted materials, so we must purchase and supply materials and store them for access in our database.
+
+## Considerations
+
+We are considering using IBM Granite because it's a trully open-source model with training data is traceable so we can avoid any copyright issues and we are able to know what is going on in the model.
