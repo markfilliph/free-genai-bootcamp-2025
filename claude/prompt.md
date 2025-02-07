@@ -109,4 +109,3 @@ Here is an example of simple sentence structures.
 
 
 
-Student Input: Did you see the raven this morning? They were looking at our garden.
