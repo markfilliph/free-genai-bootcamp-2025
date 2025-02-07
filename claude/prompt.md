@@ -95,7 +95,9 @@ The formatted output will generally contain three parts:
 - try and provide a non-nested bulleted list
 - talk about the vocabulary but try to leave out the japanese words because the student can refer to the vocabulary table.
 - refernece the considerations-examples.xml for good consideration examples
-- Teacher Tests
+
+
+### Teacher Tests
 - Please read this file so you can see more examples to provide better output japanese-teaching-test.md
 
 ### Last Checks
