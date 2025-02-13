@@ -215,5 +215,4 @@ The purpose of this page is to make configurations to the study portal.
    - this will drop all tables and re-create with seed data
 
 #### Needed API Endpoints
-- POST /api/reset_history
-- POST /api/full_reset
+
