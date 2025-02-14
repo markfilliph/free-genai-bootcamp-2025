@@ -12,7 +12,7 @@ A language learning school wants to build a prototype of learning portal which w
 - The backend will be built using Go
 - The database will be SQLite3
 - The API will be built using Gin
--Mage is a task runner for Go.
+- Mage is a task runner for Go.
 - The API will always return JSON
 - There will no authentication or authorization
 - Everything be treated as a single user
@@ -23,16 +23,34 @@ A language learning school wants to build a prototype of learning portal which w
 backend_go/
 ├── cmd/
 │   └── server/
+│       └── main.go                 # Main application entry point
 ├── internal/
-│   ├── models/     # Data structures and database operations
-│   ├── handlers/   # HTTP handlers organized by feature (dashboard, words, groups, etc.)
-│   └── service/    # Business logic
+│   ├── models/                     # Data structures and database operations
+│   │   ├── db.go                  # Database connection and initialization
+│   │   ├── word.go                # Word model and operations
+│   │   ├── group.go               # Group model and operations
+│   │   ├── study_session.go       # Study session model
+│   │   ├── study_activity.go      # Study activity model
+│   │   └── word_review.go         # Word review model
+│   ├── handlers/                   # HTTP handlers organized by feature
+│   │   ├── dashboard.go           # Dashboard related endpoints
+│   │   ├── words.go               # Word management endpoints
+│   │   ├── groups.go              # Group management endpoints
+│   │   ├── study.go               # Study session endpoints
+│   │   └── reset.go               # Reset functionality endpoints
+│   └── service/                    # Business logic layer
+│       ├── dashboard.go           # Dashboard business logic
+│       ├── words.go               # Word management logic
+│       ├── groups.go              # Group management logic
+│       └── study.go               # Study session logic
 ├── db/
 │   ├── migrations/
-│   └── seeds/      # For initial data population
-├── magefile.go
-├── go.mod
-└── words.db
+│   │   └── 001_initial_schema.sql # Database schema
+│   └── seeds/                     # Initial data population
+│       └── initial_data.sql       # Seed data for testing
+├── magefile.go                    # Task definitions for build, test, migrate
+├── go.mod                         # Go module definition
+└── words.db                       # SQLite database file (will be created by the app)
 ```
 
 ## Database Schema
