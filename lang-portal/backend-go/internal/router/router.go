@@ -1,65 +1,56 @@
 package router
 
 import (
-	"github.com/gin-gonic/gin"
 	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 	"lang-portal/internal/handlers"
-	"time"
 )
 
-// SetupRouter creates and configures a new Gin router
+// SetupRouter initializes the Gin router with all routes and middleware
 func SetupRouter() *gin.Engine {
-	// Create default gin router with Logger and Recovery middleware
 	r := gin.Default()
 
 	// Configure CORS
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:          12 * time.Hour,
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{"Origin", "Content-Type"},
 	}))
 
-	// Setup routes
 	setupRoutes(r)
 
 	return r
 }
 
-// setupRoutes configures all the routes for our application
+// setupRoutes configures all API routes
 func setupRoutes(r *gin.Engine) {
-	// API group
-	api := r.Group("/api")
-
 	// Dashboard routes
-	api.GET("/dashboard/last_study_session", handlers.GetLastStudySession)
-	api.GET("/dashboard/study_progress", handlers.GetStudyProgress)
-	api.GET("/dashboard/quick-stats", handlers.GetQuickStats)
+	r.GET("/api/dashboard/last-study-session", handlers.GetLastStudySession)
+	r.GET("/api/dashboard/study-progress", handlers.GetStudyProgress)
+	r.GET("/api/dashboard/quick-stats", handlers.GetQuickStats)
 
-	// Study activities routes
-	api.GET("/study_activities/:id", handlers.GetStudyActivity)
-	api.GET("/study_activities/:id/study_sessions", handlers.GetStudyActivitySessions)
-	api.POST("/study_activities", handlers.CreateStudyActivity)
+	// Study activity routes
+	r.GET("/api/study-activities/:id", handlers.GetStudyActivity)
+	r.GET("/api/study-activities/:id/sessions", handlers.GetStudyActivitySessions)
+	r.POST("/api/study-activities", handlers.CreateStudyActivity)
 
-	// Words routes
-	api.GET("/words", handlers.GetWords)
-	api.GET("/words/:id", handlers.GetWord)
+	// Study session routes
+	r.GET("/api/study-sessions", handlers.GetStudySessions)
+	r.GET("/api/study-sessions/:id", handlers.GetStudySession)
+	r.GET("/api/study-sessions/:id/words", handlers.GetStudySessionWords)
+	r.POST("/api/study-sessions/:id/words/:word_id/review", handlers.ReviewWord)
 
-	// Groups routes
-	api.GET("/groups", handlers.GetGroups)
-	api.GET("/groups/:id", handlers.GetGroup)
-	api.GET("/groups/:id/words", handlers.GetGroupWords)
-	api.GET("/groups/:id/study_sessions", handlers.GetGroupStudySessions)
+	// Word routes
+	r.GET("/api/words", handlers.GetWords)
+	r.GET("/api/words/:id", handlers.GetWord)
 
-	// Study sessions routes
-	api.GET("/study_sessions", handlers.GetStudySessions)
-	api.GET("/study_sessions/:id", handlers.GetStudySession)
-	api.GET("/study_sessions/:id/words", handlers.GetStudySessionWords)
-	api.POST("/study_sessions/:id/words/:word_id/review", handlers.ReviewWord)
+	// Group routes
+	r.GET("/api/groups", handlers.GetGroups)
+	r.GET("/api/groups/:id", handlers.GetGroup)
+	r.GET("/api/groups/:id/words", handlers.GetGroupWords)
+	r.GET("/api/groups/:id/study-sessions", handlers.GetGroupStudySessions)
 
 	// Reset routes
-	api.POST("/reset_history", handlers.ResetHistory)
-	api.POST("/full_reset", handlers.FullReset)
+	r.POST("/api/reset/history", handlers.ResetHistory)
+	r.POST("/api/reset/full", handlers.FullReset)
 }

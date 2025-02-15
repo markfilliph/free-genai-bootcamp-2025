@@ -2,38 +2,71 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
+	"lang-portal/internal/models"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 // GetStudyActivity returns details of a specific study activity
 func GetStudyActivity(c *gin.Context) {
-	// TODO: Implement with actual database query
-	c.JSON(http.StatusOK, gin.H{
-		"id":            1,
-		"name":          "Vocabulary Quiz",
-		"thumbnail_url": "https://example.com/thumbnail.jpg",
-		"description":   "Practice your vocabulary with flashcards",
-	})
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		respondWithError(c, http.StatusBadRequest, "Invalid activity ID")
+		return
+	}
+
+	activity, err := models.GetStudyActivity(id)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to get study activity")
+		return
+	}
+
+	c.JSON(http.StatusOK, activity)
 }
 
 // GetStudyActivitySessions returns paginated study sessions for an activity
 func GetStudyActivitySessions(c *gin.Context) {
 	pagination := getPaginationParams(c)
 
-	// TODO: Implement with actual database query
+	sessions, err := models.GetStudySessions()
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to get study sessions")
+		return
+	}
+
+	// Filter and paginate sessions
+	var filteredSessions []gin.H
+	start := (pagination.Page - 1) * pagination.PageSize
+	end := start + pagination.PageSize
+	if end > len(sessions) {
+		end = len(sessions)
+	}
+
+	for _, s := range sessions[start:end] {
+		group, err := models.GetGroup(s.GroupID)
+		if err != nil {
+			continue
+		}
+
+		activity, err := models.GetStudyActivity(s.StudyActivityID)
+		if err != nil {
+			continue
+		}
+
+		filteredSessions = append(filteredSessions, gin.H{
+			"id":                s.ID,
+			"activity_name":     "Vocabulary Quiz", // TODO: Add activity name to model
+			"group_name":        group.Name,
+			"start_time":        s.CreatedAt,
+			"end_time":          activity.CreatedAt,
+			"review_items_count": len(sessions),
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"items": []gin.H{
-			{
-				"id":                123,
-				"activity_name":     "Vocabulary Quiz",
-				"group_name":        "Basic Greetings",
-				"start_time":        "2025-02-08T17:20:23-05:00",
-				"end_time":          "2025-02-08T17:30:23-05:00",
-				"review_items_count": 20,
-			},
-		},
-		"pagination": calculatePagination(pagination.Page, pagination.PageSize, 100),
+		"items":      filteredSessions,
+		"pagination": calculatePagination(pagination.Page, pagination.PageSize, len(sessions)),
 	})
 }
 
@@ -49,11 +82,28 @@ func CreateStudyActivity(c *gin.Context) {
 		return
 	}
 
-	// TODO: Implement with actual database query
+	activity, err := models.CreateStudyActivity(request.GroupID)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to create study activity")
+		return
+	}
+
+	session, err := models.CreateStudySession(request.GroupID)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to create study session")
+		return
+	}
+
+	err = models.LinkStudyActivityToSession(activity.ID, session.ID)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to link activity to session")
+		return
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
-		"id":                request.StudyActivityID,
-		"group_id":          request.GroupID,
-		"created_at":        "2025-02-08T17:20:23-05:00",
+		"id":                activity.ID,
+		"group_id":          activity.GroupID,
+		"created_at":        activity.CreatedAt,
 	})
 }
 
@@ -61,59 +111,115 @@ func CreateStudyActivity(c *gin.Context) {
 func GetStudySessions(c *gin.Context) {
 	pagination := getPaginationParams(c)
 
-	// TODO: Implement with actual database query
+	sessions, err := models.GetStudySessions()
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to get study sessions")
+		return
+	}
+
+	// Filter and paginate sessions
+	var filteredSessions []gin.H
+	start := (pagination.Page - 1) * pagination.PageSize
+	end := start + pagination.PageSize
+	if end > len(sessions) {
+		end = len(sessions)
+	}
+
+	for _, s := range sessions[start:end] {
+		group, err := models.GetGroup(s.GroupID)
+		if err != nil {
+			continue
+		}
+
+		stats, err := models.GetStudySessionStats(s.ID)
+		if err != nil {
+			continue
+		}
+
+		filteredSessions = append(filteredSessions, gin.H{
+			"id":           s.ID,
+			"group_name":   group.Name,
+			"created_at":   s.CreatedAt,
+			"total_words": stats["total"],
+			"correct":     stats["correct"],
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"items": []gin.H{
-			{
-				"id":           1,
-				"group_name":   "Basic Greetings",
-				"created_at":   "2025-02-08T17:20:23-05:00",
-				"total_words": 20,
-				"correct":     15,
-			},
-		},
-		"pagination": calculatePagination(pagination.Page, pagination.PageSize, 100),
+		"items":      filteredSessions,
+		"pagination": calculatePagination(pagination.Page, pagination.PageSize, len(sessions)),
 	})
 }
 
 // GetStudySession returns details of a specific study session
 func GetStudySession(c *gin.Context) {
-	id := c.Param("id")
-	
-	// TODO: Implement with actual database query
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		respondWithError(c, http.StatusBadRequest, "Invalid session ID")
+		return
+	}
+
+	session, err := models.GetStudySession(id)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to get study session")
+		return
+	}
+
+	group, err := models.GetGroup(session.GroupID)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to get group info")
+		return
+	}
+
+	stats, err := models.GetStudySessionStats(id)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to get session stats")
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"id":           id,
-		"group_name":   "Basic Greetings",
-		"created_at":   "2025-02-08T17:20:23-05:00",
-		"total_words": 20,
-		"correct":     15,
+		"id":           session.ID,
+		"group_name":   group.Name,
+		"created_at":   session.CreatedAt,
+		"total_words": stats["total"],
+		"correct":     stats["correct"],
 	})
 }
 
 // GetStudySessionWords returns words associated with a study session
 func GetStudySessionWords(c *gin.Context) {
-	sessionID := c.Param("id")
-	
-	// TODO: Implement with actual database query
+	sessionID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		respondWithError(c, http.StatusBadRequest, "Invalid session ID")
+		return
+	}
+
+	words, err := models.GetStudySessionWords(sessionID)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to get session words")
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"session_id": sessionID,
-		"words": []gin.H{
-			{
-				"id":       1,
-				"japanese": "こんにちは",
-				"romaji":   "konnichiwa",
-				"english":  "hello",
-				"correct":  true,
-			},
-		},
+		"words":      words,
 	})
 }
 
 // ReviewWord records a word review in a study session
 func ReviewWord(c *gin.Context) {
-	sessionID := c.Param("id")
-	wordID := c.Param("word_id")
-	
+	sessionID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		respondWithError(c, http.StatusBadRequest, "Invalid session ID")
+		return
+	}
+
+	wordID, err := strconv.ParseInt(c.Param("word_id"), 10, 64)
+	if err != nil {
+		respondWithError(c, http.StatusBadRequest, "Invalid word ID")
+		return
+	}
+
 	var request struct {
 		Correct bool `json:"correct" binding:"required"`
 	}
@@ -123,15 +229,16 @@ func ReviewWord(c *gin.Context) {
 		return
 	}
 
-	// Convert IDs to integers for validation
-	sessionIDInt, _ := strconv.ParseInt(sessionID, 10, 64)
-	wordIDInt, _ := strconv.ParseInt(wordID, 10, 64)
+	err = models.ReviewWord(wordID, sessionID, request.Correct)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to record word review")
+		return
+	}
 
-	// TODO: Implement with actual database query
 	c.JSON(http.StatusOK, gin.H{
-		"session_id": sessionIDInt,
-		"word_id":    wordIDInt,
+		"session_id": sessionID,
+		"word_id":    wordID,
 		"correct":    request.Correct,
-		"created_at": "2025-02-08T17:20:23-05:00",
+		"created_at": time.Now(),
 	})
 }
