@@ -1,25 +1,21 @@
 package database
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestDatabaseConnection(t *testing.T) {
-	config, err := NewConfig()
-	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
-	}
-
-	db, err := New(config)
+	db, err := InitDB()
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
 
-	// Test the connection with a simple query
+	// Test that we can execute a simple query
 	var version string
-	err = db.QueryRow("SELECT VERSION()").Scan(&version)
+	err = db.QueryRow("SELECT sqlite_version()").Scan(&version)
 	if err != nil {
-		t.Fatalf("Failed to query database: %v", err)
+		t.Fatalf("Failed to query database version: %v", err)
 	}
-
-	t.Logf("Successfully connected to MySQL version: %s", version)
+	t.Logf("Successfully connected to SQLite version: %s", version)
 }

@@ -2,17 +2,38 @@ package database
 
 import (
 	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/mattn/go-sqlite3"
 )
 
-// DB wraps sql.DB to add custom functionality
-type DB struct {
-	*sql.DB
+var db *sql.DB
+
+// GetDB returns the database connection
+func GetDB() (*sql.DB, error) {
+	if db == nil {
+		var err error
+		db, err = InitDB()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return db, nil
 }
 
-// New creates a new database connection
-func New(config *Config) (*DB, error) {
-	db, err := sql.Open("mysql", config.DSN())
+// CloseDB closes the database connection
+func CloseDB() error {
+	if db != nil {
+		err := db.Close()
+		if err != nil {
+			return err
+		}
+		db = nil
+	}
+	return nil
+}
+
+// InitDB initializes the database connection
+func InitDB() (*sql.DB, error) {
+	db, err := sql.Open("sqlite3", "./database.db")
 	if err != nil {
 		return nil, err
 	}
@@ -22,10 +43,5 @@ func New(config *Config) (*DB, error) {
 		return nil, err
 	}
 
-	return &DB{db}, nil
-}
-
-// Close closes the database connection
-func (db *DB) Close() error {
-	return db.DB.Close()
+	return db, nil
 }
