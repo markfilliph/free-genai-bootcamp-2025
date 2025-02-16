@@ -9,23 +9,12 @@
    go version
    ```
 
-2. **SQLite Dependencies**
-   
-   For Windows, you have two options:
-
-   a. **Using WSL (Recommended)**:
-   ```bash
-   # Install WSL if not already installed
-   wsl --install
-
-   # After WSL is installed and you've rebooted, open WSL and run:
-   sudo apt update
-   sudo apt install gcc sqlite3
-   ```
-
-   b. **Using MinGW-w64 on Windows**:
-   - Download and install MinGW-w64 from [https://www.mingw-w64.org/](https://www.mingw-w64.org/)
-   - Add the MinGW-w64 bin directory to your PATH
+2. **MySQL 9.2 or later**
+   - Make sure MySQL server is running
+   - Create a database named `lang_portal`:
+     ```sql
+     CREATE DATABASE IF NOT EXISTS lang_portal;
+     ```
 
 3. **Mage (Build Tool)**
    ```bash
@@ -40,17 +29,31 @@
    cd free-genai-bootcamp-2025/lang-portal/backend-go
    ```
 
-2. **Install dependencies**
+2. **Configure environment**
+   ```bash
+   # Copy the environment template
+   cp .env.template .env
+   
+   # Edit .env with your MySQL credentials
+   # Default values are:
+   # DB_HOST=localhost
+   # DB_PORT=3306
+   # DB_USER=root
+   # DB_PASSWORD=
+   # DB_NAME=lang_portal
+   ```
+
+3. **Install dependencies**
    ```bash
    mage install
    ```
 
-3. **Initialize the database**
+4. **Initialize the database**
    ```bash
    mage initdb
    ```
 
-4. **Start the server**
+5. **Start the server**
    ```bash
    mage run
    ```
@@ -69,12 +72,12 @@
 ### Development Notes
 
 1. **Database Location**
-   - The SQLite database is created as `words.db` in the project root
+   - The database is created as `lang_portal` in the MySQL server
    - Backups are stored in `db/backups` with timestamps
 
 2. **Using WSL**
    - After WSL setup, the project will be accessible at `/mnt/d/GenAI/free-genai-bootcamp-2025/lang-portal`
-   - Run all commands from within WSL for better SQLite support
+   - Run all commands from within WSL for better MySQL support
 
 3. **Code Organization**
    - `cmd/server` - Main application entry point

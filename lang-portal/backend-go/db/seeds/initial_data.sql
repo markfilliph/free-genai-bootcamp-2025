@@ -1,5 +1,5 @@
--- Insert sample groups
-INSERT INTO groups (name) VALUES 
+-- Insert sample word_groups
+INSERT INTO word_groups (name) VALUES 
     ('Basic Greetings'),
     ('Numbers'),
     ('Colors'),

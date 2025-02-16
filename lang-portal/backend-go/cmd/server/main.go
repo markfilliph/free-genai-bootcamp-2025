@@ -2,10 +2,12 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"lang-portal/internal/models"
 	"lang-portal/internal/service"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 )
 
@@ -17,9 +19,11 @@ var (
 )
 
 func main() {
-	// Initialize database with in-memory SQLite
-	dsn := ":memory:"
-	if err := models.InitDB(dsn); err != nil {
+	// Load .env file if it exists
+	_ = godotenv.Load()
+
+	// Initialize database with MySQL
+	if err := models.InitDB(""); err != nil {
 		log.Fatal("Failed to initialize database:", err)
 	}
 	defer models.CloseDB()
@@ -36,8 +40,14 @@ func main() {
 	// Initialize routes
 	initializeRoutes(r)
 
+	// Get server port from environment variable, default to 8080
+	port := ":8080"
+	if envPort := os.Getenv("SERVER_PORT"); envPort != "" {
+		port = ":" + envPort
+	}
+
 	// Start server
-	if err := r.Run(":8080"); err != nil {
+	if err := r.Run(port); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
 }

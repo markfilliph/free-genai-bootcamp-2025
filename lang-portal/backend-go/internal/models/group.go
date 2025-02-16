@@ -26,7 +26,7 @@ type GroupStats struct {
 
 // GetGroups retrieves all groups with optional pagination
 func GetGroups(offset, limit int) ([]Group, error) {
-	query := "SELECT id, name, created_at FROM groups"
+	query := "SELECT id, name, created_at FROM word_groups"
 	if limit > 0 {
 		query += " LIMIT ? OFFSET ?"
 		rows, err := DB.Query(query, limit, offset)
@@ -60,20 +60,20 @@ func scanGroups(rows *sql.Rows) ([]Group, error) {
 
 // GetGroup retrieves a single group by ID
 func GetGroup(id int64) (*Group, error) {
-	var g Group
-	err := DB.QueryRow("SELECT id, name, created_at FROM groups WHERE id = ?", id).Scan(&g.ID, &g.Name, &g.CreatedAt)
+	var group Group
+	err := DB.QueryRow("SELECT id, name, created_at FROM word_groups WHERE id = ?", id).Scan(&group.ID, &group.Name, &group.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &g, nil
+	return &group, nil
 }
 
 // CreateGroup creates a new group and returns it
 func CreateGroup(name string) (*Group, error) {
-	result, err := DB.Exec("INSERT INTO groups (name) VALUES (?)", name)
+	result, err := DB.Exec("INSERT INTO word_groups (name, created_at) VALUES (?, NOW())", name)
 	if err != nil {
 		return nil, err
 	}
@@ -112,13 +112,13 @@ func GetGroupWords(groupID int64) ([]Word, error) {
 
 // AddWordToGroup adds a word to a group
 func AddWordToGroup(wordID, groupID int64) error {
-	_, err := DB.Exec("INSERT INTO group_items (word_id, group_id) VALUES (?, ?)", wordID, groupID)
+	_, err := DB.Exec("INSERT INTO words_groups (word_id, group_id) VALUES (?, ?)", wordID, groupID)
 	return err
 }
 
 // RemoveWordFromGroup removes a word from a group
 func RemoveWordFromGroup(wordID, groupID int64) error {
-	_, err := DB.Exec("DELETE FROM group_items WHERE word_id = ? AND group_id = ?", wordID, groupID)
+	_, err := DB.Exec("DELETE FROM words_groups WHERE word_id = ? AND group_id = ?", wordID, groupID)
 	return err
 }
 
@@ -130,8 +130,8 @@ func GetGroupStats(groupID int64) (*GroupStats, error) {
 	err := DB.QueryRow(`
 		SELECT COUNT(DISTINCT w.id)
 		FROM words w
-		JOIN group_items gi ON w.id = gi.word_id
-		WHERE gi.group_id = ?
+		JOIN words_groups wg ON w.id = wg.word_id
+		WHERE wg.group_id = ?
 	`, groupID).Scan(&stats.TotalWords)
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func GetGroupStats(groupID int64) (*GroupStats, error) {
 			SUM(CASE WHEN r.correct = 1 THEN 1 ELSE 0 END) as correct_answers,
 			COUNT(r.id) as total_answers
 		FROM study_sessions s
-		LEFT JOIN review_items r ON s.id = r.session_id
+		LEFT JOIN word_review_items r ON s.id = r.session_id
 		WHERE s.group_id = ?
 	`, groupID).Scan(&stats.StudySessions, &stats.StudiedWords, &stats.CorrectAnswers, &stats.TotalAnswers)
 	if err != nil {

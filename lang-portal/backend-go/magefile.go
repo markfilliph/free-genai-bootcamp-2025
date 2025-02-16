@@ -4,17 +4,17 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/joho/godotenv"
 )
 
 const (
-	dbFile     = "words.db"
 	backupDir  = "db/backups"
 	schemaFile = "db/migrations/001_initial_schema.sql"
 	seedFile   = "db/seeds/initial_data.sql"
@@ -31,153 +31,49 @@ func Install() error {
 func InitDB() error {
 	fmt.Println("Initializing database...")
 
-	if err := ensureDBDirectory(); err != nil {
-		return fmt.Errorf("failed to create database directory: %v", err)
+	// Load .env file if it exists
+	if err := godotenv.Load(); err != nil {
+		fmt.Printf("Warning: Error loading .env file: %v\n", err)
 	}
 
-	// Create database if it doesn't exist
-	db, err := sql.Open("sqlite3", dbFile)
+	// Get database connection parameters from environment
+	dbUser := getEnvOrDefault("DB_USER", "root")
+	dbPass := getEnvOrDefault("DB_PASSWORD", "")
+	dbHost := getEnvOrDefault("DB_HOST", "localhost")
+	dbPort := getEnvOrDefault("DB_PORT", "3306")
+	dbName := getEnvOrDefault("DB_NAME", "lang_portal")
+
+	fmt.Printf("Using database configuration: user=%s, host=%s, port=%s, dbname=%s\n", dbUser, dbHost, dbPort, dbName)
+
+	// Create database connection string
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
+		dbUser, dbPass, dbHost, dbPort, dbName)
+
+	// Initialize database connection
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
 	defer db.Close()
 
-	// Read and execute schema
+	// Test the connection
+	if err = db.Ping(); err != nil {
+		return fmt.Errorf("failed to ping database: %v", err)
+	}
+
+	// Execute schema file
 	if err := executeSQLFile(db, schemaFile); err != nil {
-		return fmt.Errorf("failed to execute schema: %v", err)
+		return fmt.Errorf("failed to execute schema file: %v", err)
 	}
 
-	// Read and execute seed data
-	if err := executeSQLFile(db, seedFile); err != nil {
-		return fmt.Errorf("failed to execute seed data: %v", err)
+	// Execute seed file if it exists
+	if _, err := os.Stat(seedFile); err == nil {
+		if err := executeSQLFile(db, seedFile); err != nil {
+			return fmt.Errorf("failed to execute seed file: %v", err)
+		}
 	}
 
-	fmt.Println("Database initialized successfully")
-	return nil
-}
-
-// Backup creates a backup of the database
-func Backup() error {
-	if err := ensureBackupDirectory(); err != nil {
-		return fmt.Errorf("failed to create backup directory: %v", err)
-	}
-
-	// Check if database exists
-	if _, err := os.Stat(dbFile); os.IsNotExist(err) {
-		return fmt.Errorf("database file does not exist")
-	}
-
-	// Create backup file with timestamp
-	timestamp := time.Now().Format("20060102_150405")
-	backupFile := filepath.Join(backupDir, fmt.Sprintf("words_%s.db", timestamp))
-
-	// Copy database file
-	if err := copyFile(dbFile, backupFile); err != nil {
-		return fmt.Errorf("failed to create backup: %v", err)
-	}
-
-	fmt.Printf("Database backup created: %s\n", backupFile)
-	return nil
-}
-
-// Restore restores the database from the most recent backup
-func Restore() error {
-	// Find most recent backup
-	backups, err := filepath.Glob(filepath.Join(backupDir, "words_*.db"))
-	if err != nil {
-		return fmt.Errorf("failed to list backups: %v", err)
-	}
-	if len(backups) == 0 {
-		return fmt.Errorf("no backups found")
-	}
-
-	// Get most recent backup (last file alphabetically, due to timestamp format)
-	mostRecent := backups[len(backups)-1]
-
-	// Stop server if running (implement this based on your process management)
-	Clean()
-
-	// Restore backup
-	if err := copyFile(mostRecent, dbFile); err != nil {
-		return fmt.Errorf("failed to restore backup: %v", err)
-	}
-
-	fmt.Printf("Database restored from: %s\n", mostRecent)
-	return nil
-}
-
-// Reset resets the database to a clean state
-func Reset() error {
-	fmt.Println("Resetting database...")
-
-	// Create backup before reset
-	if err := Backup(); err != nil {
-		fmt.Printf("Warning: Failed to create backup before reset: %v\n", err)
-	}
-
-	// Remove existing database
-	if err := Clean(); err != nil {
-		return fmt.Errorf("failed to clean existing database: %v", err)
-	}
-
-	// Reinitialize database
-	if err := InitDB(); err != nil {
-		return fmt.Errorf("failed to reinitialize database: %v", err)
-	}
-
-	fmt.Println("Database reset successfully")
-	return nil
-}
-
-// Status checks the database status
-func Status() error {
-	// Check if database file exists
-	info, err := os.Stat(dbFile)
-	if os.IsNotExist(err) {
-		fmt.Println("Database status: Not initialized")
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("failed to check database status: %v", err)
-	}
-
-	// Try to open and query the database
-	db, err := sql.Open("sqlite3", dbFile)
-	if err != nil {
-		return fmt.Errorf("failed to open database: %v", err)
-	}
-	defer db.Close()
-
-	// Get table counts
-	var stats struct {
-		words      int
-		groups     int
-		activities int
-		sessions   int
-	}
-
-	if err := db.QueryRow("SELECT COUNT(*) FROM words").Scan(&stats.words); err != nil {
-		return fmt.Errorf("failed to query words count: %v", err)
-	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM groups").Scan(&stats.groups); err != nil {
-		return fmt.Errorf("failed to query groups count: %v", err)
-	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM study_activities").Scan(&stats.activities); err != nil {
-		return fmt.Errorf("failed to query activities count: %v", err)
-	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM study_sessions").Scan(&stats.sessions); err != nil {
-		return fmt.Errorf("failed to query sessions count: %v", err)
-	}
-
-	fmt.Printf("Database status: Initialized\n")
-	fmt.Printf("File size: %d bytes\n", info.Size())
-	fmt.Printf("Last modified: %s\n", info.ModTime().Format(time.RFC3339))
-	fmt.Printf("Content summary:\n")
-	fmt.Printf("- Words: %d\n", stats.words)
-	fmt.Printf("- Groups: %d\n", stats.groups)
-	fmt.Printf("- Study Activities: %d\n", stats.activities)
-	fmt.Printf("- Study Sessions: %d\n", stats.sessions)
-
+	fmt.Println("Database initialization completed successfully")
 	return nil
 }
 
@@ -190,23 +86,65 @@ func Run() error {
 	return cmd.Run()
 }
 
-// Clean removes generated files
-func Clean() error {
-	fmt.Println("Cleaning...")
-	if err := os.Remove(dbFile); err != nil && !os.IsNotExist(err) {
+// Backup creates a backup of the database
+func Backup() error {
+	if err := ensureBackupDirectory(); err != nil {
 		return err
 	}
+
+	timestamp := time.Now().Format("20060102150405")
+	backupFile := filepath.Join(backupDir, fmt.Sprintf("backup_%s.sql", timestamp))
+
+	// Get database connection parameters from environment
+	_ = godotenv.Load()
+	dbUser := getEnvOrDefault("DB_USER", "root")
+	dbPass := getEnvOrDefault("DB_PASSWORD", "")
+	dbHost := getEnvOrDefault("DB_HOST", "localhost")
+	dbPort := getEnvOrDefault("DB_PORT", "3306")
+	dbName := getEnvOrDefault("DB_NAME", "lang_portal")
+
+	// Create mysqldump command
+	cmd := exec.Command("mysqldump",
+		"-h", dbHost,
+		"-P", dbPort,
+		"-u", dbUser,
+		fmt.Sprintf("-p%s", dbPass),
+		dbName)
+
+	// Open the output file
+	outFile, err := os.Create(backupFile)
+	if err != nil {
+		return fmt.Errorf("failed to create backup file: %v", err)
+	}
+	defer outFile.Close()
+
+	// Set the output to our file
+	cmd.Stdout = outFile
+
+	// Run the command
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create backup: %v", err)
+	}
+
+	fmt.Printf("Backup created successfully: %s\n", backupFile)
+	return nil
+}
+
+// Clean removes generated files
+func Clean() error {
+	fmt.Println("Cleaning generated files...")
 	return nil
 }
 
 // Default is the default target
 var Default = Run
 
-// Helper functions
-
-func ensureDBDirectory() error {
-	dir := filepath.Dir(dbFile)
-	return os.MkdirAll(dir, 0755)
+// Helper function to get environment variable with default fallback
+func getEnvOrDefault(key, defaultValue string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return defaultValue
 }
 
 func ensureBackupDirectory() error {
@@ -216,25 +154,24 @@ func ensureBackupDirectory() error {
 func executeSQLFile(db *sql.DB, file string) error {
 	content, err := os.ReadFile(file)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read SQL file: %v", err)
 	}
-	_, err = db.Exec(string(content))
-	return err
-}
 
-func copyFile(src, dst string) error {
-	source, err := os.Open(src)
-	if err != nil {
-		return err
+	// Split the SQL file into individual statements
+	statements := strings.Split(string(content), ";")
+
+	// Execute each statement
+	for _, stmt := range statements {
+		// Skip empty statements
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("failed to execute SQL statement '%s': %v", stmt, err)
+		}
 	}
-	defer source.Close()
 
-	destination, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer destination.Close()
-
-	_, err = io.Copy(destination, source)
-	return err
+	return nil
 }
