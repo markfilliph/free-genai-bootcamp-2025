@@ -64,7 +64,8 @@ func (s *DashboardService) GetQuickStats() (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	groups, err := models.GetGroups()
+	// Get all groups
+	groups, err := models.GetGroups(0, 0) // Pass 0 for limit to get all groups
 	if err != nil {
 		return nil, err
 	}

@@ -4,17 +4,17 @@ import (
 	"lang-portal/internal/models"
 )
 
-// GroupService handles business logic for group operations
-type GroupService struct{}
+// GroupServiceImpl handles business logic for group operations
+type GroupServiceImpl struct{}
 
-// NewGroupService creates a new group service
-func NewGroupService() *GroupService {
-	return &GroupService{}
+// NewGroupServiceImpl creates a new group service
+func NewGroupServiceImpl() *GroupServiceImpl {
+	return &GroupServiceImpl{}
 }
 
 // GetGroups returns all groups with additional statistics
-func (s *GroupService) GetGroups() ([]map[string]interface{}, error) {
-	groups, err := models.GetGroups()
+func (s *GroupServiceImpl) GetGroups(offset, limit int) ([]map[string]interface{}, error) {
+	groups, err := models.GetGroups(offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func (s *GroupService) GetGroups() ([]map[string]interface{}, error) {
 }
 
 // GetGroup returns details of a specific group
-func (s *GroupService) GetGroup(id int64) (map[string]interface{}, error) {
+func (s *GroupServiceImpl) GetGroup(id int64) (map[string]interface{}, error) {
 	group, err := models.GetGroup(id)
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (s *GroupService) GetGroup(id int64) (map[string]interface{}, error) {
 }
 
 // GetGroupWords returns all words in a group with their study statistics
-func (s *GroupService) GetGroupWords(groupID int64) ([]map[string]interface{}, error) {
+func (s *GroupServiceImpl) GetGroupWords(groupID int64) ([]map[string]interface{}, error) {
 	words, err := models.GetGroupWords(groupID)
 	if err != nil {
 		return nil, err
@@ -90,7 +90,7 @@ func (s *GroupService) GetGroupWords(groupID int64) ([]map[string]interface{}, e
 }
 
 // GetGroupStudySessions returns study sessions for a group with detailed statistics
-func (s *GroupService) GetGroupStudySessions(groupID int64) ([]map[string]interface{}, error) {
+func (s *GroupServiceImpl) GetGroupStudySessions(groupID int64) ([]map[string]interface{}, error) {
 	// Get all sessions with a large limit since we'll filter by group
 	sessions, err := models.GetStudySessions(0, 1000)
 	if err != nil {
@@ -126,4 +126,27 @@ func (s *GroupService) GetGroupStudySessions(groupID int64) ([]map[string]interf
 	}
 
 	return result, nil
+}
+
+// CreateGroup creates a new group
+func (s *GroupServiceImpl) CreateGroup(name string) (map[string]interface{}, error) {
+	group, err := models.CreateGroup(name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get group statistics
+	stats, err := models.GetGroupStats(group.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Combine group data with statistics
+	return map[string]interface{}{
+		"id":            group.ID,
+		"name":          group.Name,
+		"created_at":    group.CreatedAt,
+		"total_words":   stats["total_words"],
+		"studied_words": stats["studied_words"],
+	}, nil
 }

@@ -34,53 +34,47 @@ func GetStudyActivitySessions(c *gin.Context) {
 	}
 
 	pagination := getPaginationParams(c)
-
-	// Calculate offset from page and page size
 	offset := (pagination.Page - 1) * pagination.PageSize
 
-	sessions, err := models.GetStudySessions(offset, pagination.PageSize)
+	// Get total count for pagination
+	total, err := models.GetTotalStudySessionsByActivity(id)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to get total sessions count")
+		return
+	}
+
+	// Get paginated sessions
+	sessions, err := models.GetStudySessionsByActivity(id, offset, pagination.PageSize)
 	if err != nil {
 		respondWithError(c, http.StatusInternalServerError, "Failed to get study sessions")
 		return
 	}
 
-	// Filter sessions by activity ID
-	var filteredSessions []gin.H
+	var result []gin.H
 	for _, s := range sessions {
-		if s.StudyActivityID != nil && *s.StudyActivityID == id {
-			group, err := models.GetGroup(s.GroupID)
-			if err != nil {
-				continue
-			}
-
-			stats, err := models.GetStudySessionStats(s.ID)
-			if err != nil {
-				continue
-			}
-
-			filteredSessions = append(filteredSessions, gin.H{
-				"id":            s.ID,
-				"group_name":    group.Name,
-				"created_at":    s.CreatedAt,
-				"total_words":   stats["total"],
-				"correct_words": stats["correct"],
-			})
+		group, err := models.GetGroup(s.GroupID)
+		if err != nil {
+			continue
 		}
-	}
 
-	// Apply pagination
-	start := (pagination.Page - 1) * pagination.PageSize
-	end := start + pagination.PageSize
-	if start >= len(filteredSessions) {
-		start = len(filteredSessions)
-	}
-	if end > len(filteredSessions) {
-		end = len(filteredSessions)
+		stats, err := models.GetStudySessionStats(s.ID)
+		if err != nil {
+			continue
+		}
+
+		result = append(result, gin.H{
+			"id":               s.ID,
+			"group_id":         s.GroupID,
+			"group_name":       group.Name,
+			"created_at":       s.CreatedAt,
+			"total_words":      stats["total"],
+			"correct_words":    stats["correct"],
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"items":      filteredSessions[start:end],
-		"pagination": calculatePagination(pagination.Page, pagination.PageSize, len(filteredSessions)),
+		"items":      result,
+		"pagination": calculatePagination(pagination.Page, pagination.PageSize, total),
 	})
 }
 

@@ -11,7 +11,7 @@ import (
 
 var (
 	dashboardService *service.DashboardService
-	groupService     *service.GroupService
+	groupService     *service.GroupServiceImpl
 	studyService     *service.StudyService
 	wordService      *service.WordService
 )
@@ -25,7 +25,7 @@ func main() {
 
 	// Initialize services
 	dashboardService = service.NewDashboardService()
-	groupService = service.NewGroupService()
+	groupService = service.NewGroupServiceImpl()
 	studyService = service.NewStudyService()
 	wordService = service.NewWordService()
 
@@ -61,6 +61,7 @@ func initializeRoutes(r *gin.Engine) {
 
 	// Groups routes
 	api.GET("/groups", getGroups)
+	api.POST("/groups", createGroup)
 	api.GET("/groups/:id", getGroup)
 	api.GET("/groups/:id/words", getGroupWords)
 	api.GET("/groups/:id/study-sessions", getGroupStudySessions)
@@ -180,12 +181,48 @@ func getWord(c *gin.Context) {
 
 // Group handlers
 func getGroups(c *gin.Context) {
-	groups, err := groupService.GetGroups()
+	offset := 0
+	limit := 10 // Default limit
+
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if val, err := strconv.Atoi(offsetStr); err == nil {
+			offset = val
+		}
+	}
+
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if val, err := strconv.Atoi(limitStr); err == nil {
+			limit = val
+		}
+	}
+
+	groups, err := groupService.GetGroups(offset, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
 	c.JSON(http.StatusOK, groups)
+}
+
+type CreateGroupRequest struct {
+	Name string `json:"name" binding:"required"`
+}
+
+func createGroup(c *gin.Context) {
+	var req CreateGroupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	group, err := groupService.CreateGroup(req.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, group)
 }
 
 func getGroup(c *gin.Context) {

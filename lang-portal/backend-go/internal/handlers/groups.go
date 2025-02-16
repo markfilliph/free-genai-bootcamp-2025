@@ -11,7 +11,8 @@ import (
 func GetGroups(c *gin.Context) {
 	pagination := getPaginationParams(c)
 
-	groups, err := models.GetGroups()
+	// Get all groups
+	groups, err := models.GetGroups(0, 0) // Pass 0 for limit to get all groups
 	if err != nil {
 		respondWithError(c, http.StatusInternalServerError, "Failed to get groups")
 		return

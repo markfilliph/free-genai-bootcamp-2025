@@ -262,3 +262,48 @@ func GetStudySessionByActivityID(activityID int64) (*StudySession, error) {
 
 	return &session, nil
 }
+
+// GetStudySessionsByActivity returns study sessions for a specific activity with pagination
+func GetStudySessionsByActivity(activityID int64, offset, limit int) ([]*StudySession, error) {
+	rows, err := DB.Query(`
+		SELECT id, group_id, study_activity_id, created_at
+		FROM study_sessions
+		WHERE study_activity_id = ?
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`, activityID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []*StudySession
+	for rows.Next() {
+		var session StudySession
+		err := rows.Scan(&session.ID, &session.GroupID, &session.StudyActivityID, &session.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, &session)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return sessions, nil
+}
+
+// GetTotalStudySessionsByActivity returns the total count of study sessions for an activity
+func GetTotalStudySessionsByActivity(activityID int64) (int, error) {
+	var count int
+	err := DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM study_sessions
+		WHERE study_activity_id = ?
+	`, activityID).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}

@@ -55,7 +55,7 @@ func GetQuickStats(c *gin.Context) {
 	}
 
 	// Get total active groups
-	groups, err := models.GetGroups()
+	groups, err := models.GetGroups(0, 0) // Pass 0 for limit to get all groups
 	if err != nil {
 		respondWithError(c, http.StatusInternalServerError, "Failed to get groups")
 		return
