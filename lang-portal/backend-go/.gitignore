@@ -1,10 +1,23 @@
-# Environment variables
-.env
-
-# Go binary and test files
+# Binaries
 *.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+server
+
+# Database
+*.db
+*.db-journal
+
+# Test binary, built with `go test -c`
 *.test
+
+# Output of the go coverage tool
 *.out
+
+# Dependency directories
+vendor/
 
 # IDE specific files
 .idea/
@@ -12,6 +25,11 @@
 *.swp
 *.swo
 
-# OS specific files
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
