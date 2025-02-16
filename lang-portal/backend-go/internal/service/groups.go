@@ -27,12 +27,12 @@ func (s *GroupServiceImpl) GetGroups(offset, limit int) ([]map[string]interface{
 		}
 
 		result = append(result, map[string]interface{}{
-			"id":               group.ID,
+			"id":              group.ID,
 			"name":            group.Name,
-			"total_words":     stats["total_words"],
-			"studied_words":   stats["studied_words"],
-			"mastered_words":  stats["mastered_words"],
-			"study_sessions": stats["study_sessions"],
+			"total_words":     stats.TotalWords,
+			"studied_words":   stats.StudiedWords,
+			"mastered_words":  stats.MasteredWords,
+			"study_sessions": stats.StudySessions,
 		})
 	}
 
@@ -52,12 +52,13 @@ func (s *GroupServiceImpl) GetGroup(id int64) (map[string]interface{}, error) {
 	}
 
 	return map[string]interface{}{
-		"id":               group.ID,
+		"id":              group.ID,
 		"name":            group.Name,
-		"total_words":     stats["total_words"],
-		"studied_words":   stats["studied_words"],
-		"mastered_words":  stats["mastered_words"],
-		"study_sessions": stats["study_sessions"],
+		"total_words":     stats.TotalWords,
+		"studied_words":   stats.StudiedWords,
+		"mastered_words":  stats.MasteredWords,
+		"study_sessions": stats.StudySessions,
+		"success_rate":    stats.SuccessRate,
 	}, nil
 }
 
@@ -70,19 +71,12 @@ func (s *GroupServiceImpl) GetGroupWords(groupID int64) ([]map[string]interface{
 
 	var result []map[string]interface{}
 	for _, word := range words {
-		stats, err := models.GetWordReviewStats(word.ID)
-		if err != nil {
-			continue
-		}
-
 		result = append(result, map[string]interface{}{
-			"id":            word.ID,
-			"japanese":      word.Japanese,
-			"romaji":       word.Romaji,
-			"english":      word.English,
-			"parts":        word.Parts,
-			"total_reviews": stats["total_reviews"],
-			"success_rate":  stats["success_rate"],
+			"id":       word.ID,
+			"japanese": word.Japanese,
+			"romaji":   word.Romaji,
+			"english":  word.English,
+			"parts":    word.Parts,
 		})
 	}
 
@@ -91,38 +85,42 @@ func (s *GroupServiceImpl) GetGroupWords(groupID int64) ([]map[string]interface{
 
 // GetGroupStudySessions returns study sessions for a group with detailed statistics
 func (s *GroupServiceImpl) GetGroupStudySessions(groupID int64) ([]map[string]interface{}, error) {
-	// Get all sessions with a large limit since we'll filter by group
-	sessions, err := models.GetStudySessions(0, 1000)
+	// Get the group first to ensure it exists
+	_, err := models.GetGroup(groupID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get study sessions for the group
+	sessions, err := models.GetStudySessionsByGroup(groupID, 0, 100) // Default pagination: first 100 sessions
 	if err != nil {
 		return nil, err
 	}
 
 	var result []map[string]interface{}
 	for _, session := range sessions {
-		if session.GroupID != groupID {
-			continue
-		}
-
-		stats, err := models.GetStudySessionStats(session.ID)
-		if err != nil {
-			continue
-		}
-
-		var activityName string
-		if session.StudyActivityID != nil && *session.StudyActivityID != 0 {
-			activity, err := models.GetStudyActivity(*session.StudyActivityID)
-			if err == nil && activity != nil {
-				activityName = "Vocabulary Quiz" // Default activity type for now
+		// Get activity details
+		if session.StudyActivityID != nil {
+			_, err := models.GetStudyActivity(*session.StudyActivityID)
+			if err != nil {
+				continue
 			}
-		}
 
-		result = append(result, map[string]interface{}{
-			"id":             session.ID,
-			"activity_name":  activityName,
-			"created_at":     session.CreatedAt,
-			"total_words":    stats["total"],
-			"correct_words":  stats["correct"],
-		})
+			// Get session statistics
+			stats, err := models.GetStudySessionStats(session.ID)
+			if err != nil {
+				continue
+			}
+
+			result = append(result, map[string]interface{}{
+				"id":           session.ID,
+				"activity":     "Vocabulary Quiz", // Default activity type for now
+				"created_at":   session.CreatedAt,
+				"total_words":  stats["total_reviews"],
+				"correct":      stats["correct_reviews"],
+				"success_rate": stats["success_rate"],
+			})
+		}
 	}
 
 	return result, nil
@@ -135,18 +133,19 @@ func (s *GroupServiceImpl) CreateGroup(name string) (map[string]interface{}, err
 		return nil, err
 	}
 
-	// Get group statistics
 	stats, err := models.GetGroupStats(group.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Combine group data with statistics
 	return map[string]interface{}{
-		"id":            group.ID,
-		"name":          group.Name,
-		"created_at":    group.CreatedAt,
-		"total_words":   stats["total_words"],
-		"studied_words": stats["studied_words"],
+		"id":              group.ID,
+		"name":            group.Name,
+		"created_at":      group.CreatedAt,
+		"total_words":     stats.TotalWords,
+		"studied_words":   stats.StudiedWords,
+		"mastered_words":  stats.MasteredWords,
+		"study_sessions": stats.StudySessions,
+		"success_rate":    stats.SuccessRate,
 	}, nil
 }

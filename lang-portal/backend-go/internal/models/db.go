@@ -2,7 +2,7 @@ package models
 
 import (
 	"database/sql"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 	"log"
 )
 
@@ -11,7 +11,7 @@ var DB *sql.DB
 // InitDB initializes the database connection
 func InitDB(dataSourceName string) error {
 	var err error
-	DB, err = sql.Open("sqlite3", dataSourceName)
+	DB, err = sql.Open("sqlite", dataSourceName)
 	if err != nil {
 		return err
 	}
@@ -30,4 +30,12 @@ func CloseDB() error {
 		return DB.Close()
 	}
 	return nil
+}
+
+// GetDB returns the database connection
+func GetDB() (*sql.DB, error) {
+	if DB == nil {
+		return nil, sql.ErrConnDone
+	}
+	return DB, nil
 }

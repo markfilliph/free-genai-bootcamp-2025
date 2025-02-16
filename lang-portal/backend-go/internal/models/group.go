@@ -3,41 +3,50 @@ package models
 import (
 	"database/sql"
 	"time"
-
-	"lang-portal/internal/database"
 )
 
-// Group represents a word group
 type Group struct {
 	ID        int64     `json:"id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// GetGroups returns all groups with pagination
+type GroupStats struct {
+	TotalWords      int `json:"total_words"`
+	StudiedWords    int `json:"studied_words"`
+	MasteredWords   int `json:"mastered_words"`
+	StudySessions   int `json:"study_sessions"`
+	LastStudyDays   int `json:"last_study_days"`
+	StudyStreak     int `json:"study_streak"`
+	CorrectAnswers  int `json:"correct_answers"`
+	TotalAnswers    int `json:"total_answers"`
+	SuccessRate     int `json:"success_rate"`
+	StudyTimeMinute int `json:"study_time_minute"`
+}
+
+// GetGroups retrieves all groups with optional pagination
 func GetGroups(offset, limit int) ([]Group, error) {
-	db, err := database.GetDB()
+	query := "SELECT id, name, created_at FROM groups"
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		rows, err := DB.Query(query, limit, offset)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		return scanGroups(rows)
+	}
+
+	rows, err := DB.Query(query)
 	if err != nil {
 		return nil, err
 	}
-
-	query := "SELECT id, name, created_at FROM word_groups"
-	if limit > 0 {
-		query += " LIMIT ? OFFSET ?"
-	}
-
-	var rows *sql.Rows
-	var queryErr error
-	if limit > 0 {
-		rows, queryErr = db.Query(query, limit, offset)
-	} else {
-		rows, queryErr = db.Query(query)
-	}
-	if queryErr != nil {
-		return nil, queryErr
-	}
 	defer rows.Close()
+	return scanGroups(rows)
+}
 
+// scanGroups scans rows into Group structs
+func scanGroups(rows *sql.Rows) ([]Group, error) {
 	var groups []Group
 	for rows.Next() {
 		var g Group
@@ -49,35 +58,42 @@ func GetGroups(offset, limit int) ([]Group, error) {
 	return groups, nil
 }
 
-// GetGroup returns a single group by ID
+// GetGroup retrieves a single group by ID
 func GetGroup(id int64) (*Group, error) {
-	db, err := database.GetDB()
-	if err != nil {
-		return nil, err
-	}
-
 	var g Group
-	err = db.QueryRow("SELECT id, name, created_at FROM word_groups WHERE id = ?", id).Scan(&g.ID, &g.Name, &g.CreatedAt)
+	err := DB.QueryRow("SELECT id, name, created_at FROM groups WHERE id = ?", id).Scan(&g.ID, &g.Name, &g.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
 	return &g, nil
 }
 
-// GetGroupWords returns all words in a group
-func GetGroupWords(groupID int64) ([]Word, error) {
-	db, err := database.GetDB()
+// CreateGroup creates a new group and returns it
+func CreateGroup(name string) (*Group, error) {
+	result, err := DB.Exec("INSERT INTO groups (name) VALUES (?)", name)
 	if err != nil {
 		return nil, err
 	}
 
-	query := `
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	return GetGroup(id)
+}
+
+// GetGroupWords retrieves all words in a group
+func GetGroupWords(groupID int64) ([]Word, error) {
+	rows, err := DB.Query(`
 		SELECT w.id, w.japanese, w.romaji, w.english, w.parts
 		FROM words w
-		JOIN words_groups wg ON w.id = wg.word_id
-		WHERE wg.group_id = ?
-	`
-	rows, err := db.Query(query, groupID)
+		JOIN group_items gi ON w.id = gi.word_id
+		WHERE gi.group_id = ?
+	`, groupID)
 	if err != nil {
 		return nil, err
 	}
@@ -94,135 +110,52 @@ func GetGroupWords(groupID int64) ([]Word, error) {
 	return words, nil
 }
 
-// CreateGroup creates a new group
-func CreateGroup(name string) (*Group, error) {
-	db, err := database.GetDB()
-	if err != nil {
-		return nil, err
-	}
-
-	result, err := db.Exec("INSERT INTO word_groups (name) VALUES (?)", name)
-	if err != nil {
-		return nil, err
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-
-	return &Group{ID: id, Name: name}, nil
-}
-
-// UpdateGroup updates an existing group
-func UpdateGroup(id int64, name string) error {
-	db, err := database.GetDB()
-	if err != nil {
-		return err
-	}
-
-	_, err = db.Exec("UPDATE word_groups SET name = ? WHERE id = ?", name, id)
-	return err
-}
-
-// DeleteGroup deletes a group and its relationships
-func DeleteGroup(id int64) error {
-	db, err := database.GetDB()
-	if err != nil {
-		return err
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	// Delete from words_groups
-	_, err = tx.Exec("DELETE FROM words_groups WHERE group_id = ?", id)
-	if err != nil {
-		return err
-	}
-
-	// Delete from study_activities
-	_, err = tx.Exec("DELETE FROM study_activities WHERE group_id = ?", id)
-	if err != nil {
-		return err
-	}
-
-	// Delete from study_sessions
-	_, err = tx.Exec("DELETE FROM study_sessions WHERE group_id = ?", id)
-	if err != nil {
-		return err
-	}
-
-	// Delete the group
-	_, err = tx.Exec("DELETE FROM word_groups WHERE id = ?", id)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit()
-}
-
 // AddWordToGroup adds a word to a group
 func AddWordToGroup(wordID, groupID int64) error {
-	db, err := database.GetDB()
-	if err != nil {
-		return err
-	}
-
-	_, err = db.Exec(`
-		INSERT INTO words_groups (word_id, group_id)
-		VALUES (?, ?)
-	`, wordID, groupID)
+	_, err := DB.Exec("INSERT INTO group_items (word_id, group_id) VALUES (?, ?)", wordID, groupID)
 	return err
 }
 
 // RemoveWordFromGroup removes a word from a group
 func RemoveWordFromGroup(wordID, groupID int64) error {
-	db, err := database.GetDB()
-	if err != nil {
-		return err
-	}
-
-	_, err = db.Exec(`
-		DELETE FROM words_groups 
-		WHERE word_id = ? AND group_id = ?
-	`, wordID, groupID)
+	_, err := DB.Exec("DELETE FROM group_items WHERE word_id = ? AND group_id = ?", wordID, groupID)
 	return err
 }
 
-// GetGroupStats returns statistics about a group
-func GetGroupStats(groupID int64) (map[string]int, error) {
-	db, err := database.GetDB()
+// GetGroupStats retrieves statistics for a group
+func GetGroupStats(groupID int64) (*GroupStats, error) {
+	var stats GroupStats
+
+	// Get total words in group
+	err := DB.QueryRow(`
+		SELECT COUNT(DISTINCT w.id)
+		FROM words w
+		JOIN group_items gi ON w.id = gi.word_id
+		WHERE gi.group_id = ?
+	`, groupID).Scan(&stats.TotalWords)
 	if err != nil {
 		return nil, err
 	}
 
-	var totalWords, studiedWords int
-	
-	err = db.QueryRow(`
-		SELECT COUNT(*) 
-		FROM words_groups 
-		WHERE group_id = ?
-	`, groupID).Scan(&totalWords)
+	// Get study session stats
+	err = DB.QueryRow(`
+		SELECT 
+			COUNT(DISTINCT s.id) as study_sessions,
+			COUNT(DISTINCT r.word_id) as studied_words,
+			SUM(CASE WHEN r.correct = 1 THEN 1 ELSE 0 END) as correct_answers,
+			COUNT(r.id) as total_answers
+		FROM study_sessions s
+		LEFT JOIN review_items r ON s.id = r.session_id
+		WHERE s.group_id = ?
+	`, groupID).Scan(&stats.StudySessions, &stats.StudiedWords, &stats.CorrectAnswers, &stats.TotalAnswers)
 	if err != nil {
 		return nil, err
 	}
 
-	err = db.QueryRow(`
-		SELECT COUNT(DISTINCT wri.word_id)
-		FROM word_review_items wri
-		JOIN words_groups wg ON wri.word_id = wg.word_id
-		WHERE wg.group_id = ?
-	`, groupID).Scan(&studiedWords)
-	if err != nil {
-		return nil, err
+	// Calculate success rate
+	if stats.TotalAnswers > 0 {
+		stats.SuccessRate = int(float64(stats.CorrectAnswers) / float64(stats.TotalAnswers) * 100)
 	}
 
-	return map[string]int{
-		"total_words": totalWords,
-		"studied_words": studiedWords,
-	}, nil
+	return &stats, nil
 }

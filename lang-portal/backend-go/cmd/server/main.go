@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
-	"lang-portal/internal/database"
+	"lang-portal/internal/models"
 	"lang-portal/internal/service"
 	"log"
 	"net/http"
@@ -17,11 +17,12 @@ var (
 )
 
 func main() {
-	// Initialize database
-	if err := database.InitDB(); err != nil {
+	// Initialize database with in-memory SQLite
+	dsn := ":memory:"
+	if err := models.InitDB(dsn); err != nil {
 		log.Fatal("Failed to initialize database:", err)
 	}
-	defer database.CloseDB()
+	defer models.CloseDB()
 
 	// Initialize services
 	dashboardService = service.NewDashboardService()
@@ -343,7 +344,7 @@ func reviewWordInSession(c *gin.Context) {
 // Reset handlers
 func resetHistory(c *gin.Context) {
 	// Reset all study history but keep words and groups
-	db, err := database.GetDB()
+	db, err := models.GetDB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -363,7 +364,7 @@ func resetHistory(c *gin.Context) {
 
 func fullReset(c *gin.Context) {
 	// Reset everything in the database
-	db, err := database.GetDB()
+	db, err := models.GetDB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
