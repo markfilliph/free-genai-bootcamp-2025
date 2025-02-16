@@ -307,3 +307,110 @@ func GetTotalStudySessionsByActivity(activityID int64) (int, error) {
 	}
 	return count, nil
 }
+
+// GetStudySessionsByActivityID retrieves all study sessions for a specific activity
+func GetStudySessionsByActivityID(activityID int64) ([]*StudySession, error) {
+	rows, err := DB.Query(`
+		SELECT id, group_id, study_activity_id, created_at
+		FROM study_sessions
+		WHERE study_activity_id = ?
+		ORDER BY created_at DESC
+	`, activityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []*StudySession
+	for rows.Next() {
+		var session StudySession
+		var studyActivityID sql.NullInt64
+		err := rows.Scan(&session.ID, &session.GroupID, &studyActivityID, &session.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		if studyActivityID.Valid {
+			session.StudyActivityID = &studyActivityID.Int64
+		}
+		sessions = append(sessions, &session)
+	}
+
+	return sessions, nil
+}
+
+// GetStudySessionsByDate returns all study sessions ordered by date
+func GetStudySessionsByDate() ([]*StudySession, error) {
+	rows, err := DB.Query(`
+		SELECT id, group_id, study_activity_id, created_at
+		FROM study_sessions
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []*StudySession
+	for rows.Next() {
+		var session StudySession
+		var studyActivityID sql.NullInt64
+		err := rows.Scan(&session.ID, &session.GroupID, &studyActivityID, &session.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		if studyActivityID.Valid {
+			session.StudyActivityID = &studyActivityID.Int64
+		}
+		sessions = append(sessions, &session)
+	}
+
+	return sessions, nil
+}
+
+// GetTotalWordsCount returns the total number of words in the system
+func GetTotalWordsCount() (int, error) {
+	var count int
+	err := DB.QueryRow("SELECT COUNT(*) FROM words").Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// GetTotalStudiedWordsCount returns the total number of words that have been studied
+func GetTotalStudiedWordsCount() (int, error) {
+	var count int
+	err := DB.QueryRow(`
+		SELECT COUNT(DISTINCT word_id)
+		FROM word_review_items
+	`).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// GetTotalStudySessionsCount returns the total number of study sessions
+func GetTotalStudySessionsCount() (int, error) {
+	var count int
+	err := DB.QueryRow("SELECT COUNT(*) FROM study_sessions").Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// GetActiveGroupsCount returns the number of groups with study activity in the last N days
+func GetActiveGroupsCount(days int) (int, error) {
+	var count int
+	err := DB.QueryRow(`
+		SELECT COUNT(DISTINCT g.id)
+		FROM word_groups g
+		JOIN study_sessions s ON g.id = s.group_id
+		WHERE s.created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ? DAY)
+	`, days).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}

@@ -1,76 +1,142 @@
 package service
 
 import (
+	"database/sql"
+	"errors"
+	"strings"
 	"lang-portal/internal/models"
 )
 
 // WordService handles business logic for word operations
-type WordService struct{}
+type WordService struct {
+	db *sql.DB
+}
 
 // NewWordService creates a new word service
-func NewWordService() *WordService {
-	return &WordService{}
+func NewWordService(db *sql.DB) *WordService {
+	return &WordService{
+		db: db,
+	}
 }
 
 // GetWords returns all words with their study statistics
-func (s *WordService) GetWords() ([]map[string]interface{}, error) {
+func (s *WordService) GetWords() ([]models.WordResponse, error) {
 	words, err := models.GetWords()
 	if err != nil {
 		return nil, err
 	}
 
-	var result []map[string]interface{}
+	var responses []models.WordResponse
 	for _, word := range words {
 		stats, err := models.GetWordReviewStats(word.ID)
 		if err != nil {
-			continue
+			// Use default stats if error
+			stats = map[string]int{
+				"total_reviews": 0,
+				"success_rate":  0,
+			}
 		}
 
-		result = append(result, map[string]interface{}{
-			"id":            word.ID,
-			"japanese":      word.Japanese,
-			"romaji":       word.Romaji,
-			"english":      word.English,
-			"parts":        word.Parts,
-			"total_reviews": stats["total_reviews"],
-			"success_rate":  stats["success_rate"],
+		responses = append(responses, models.WordResponse{
+			ID:           word.ID,
+			Japanese:     word.Japanese,
+			Romaji:       word.Romaji,
+			English:      word.English,
+			Parts:        word.Parts,
+			TotalReviews: stats["total_reviews"],
+			SuccessRate:  float64(stats["success_rate"]),
 		})
 	}
 
-	return result, nil
+	return responses, nil
 }
 
 // GetWord returns details of a specific word with its study statistics
-func (s *WordService) GetWord(id int64) (map[string]interface{}, error) {
+func (s *WordService) GetWord(id int64) (*models.WordResponse, error) {
+	if id <= 0 {
+		return nil, errors.New("invalid word ID")
+	}
+
 	word, err := models.GetWord(id)
 	if err != nil {
 		return nil, err
 	}
+	if word == nil {
+		return nil, errors.New("word not found")
+	}
 
 	stats, err := models.GetWordReviewStats(word.ID)
 	if err != nil {
-		return nil, err
+		// Use default stats if error
+		stats = map[string]int{
+			"total_reviews": 0,
+			"success_rate":  0,
+		}
 	}
 
-	return map[string]interface{}{
-		"id":            word.ID,
-		"japanese":      word.Japanese,
-		"romaji":       word.Romaji,
-		"english":      word.English,
-		"parts":        word.Parts,
-		"total_reviews": stats["total_reviews"],
-		"success_rate":  stats["success_rate"],
+	return &models.WordResponse{
+		ID:           word.ID,
+		Japanese:     word.Japanese,
+		Romaji:       word.Romaji,
+		English:      word.English,
+		Parts:        word.Parts,
+		TotalReviews: stats["total_reviews"],
+		SuccessRate:  float64(stats["success_rate"]),
 	}, nil
 }
 
+// CreateWord creates a new word with validation
+func (s *WordService) CreateWord(japanese, romaji, english, parts string) (*models.Word, error) {
+	// Validate input
+	japanese = strings.TrimSpace(japanese)
+	romaji = strings.TrimSpace(romaji)
+	english = strings.TrimSpace(english)
+
+	if japanese == "" {
+		return nil, errors.New("japanese text cannot be empty")
+	}
+	if romaji == "" {
+		return nil, errors.New("romaji cannot be empty")
+	}
+	if english == "" {
+		return nil, errors.New("english translation cannot be empty")
+	}
+
+	// Check for duplicate Japanese text
+	words, err := models.GetWords()
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range words {
+		if w.Japanese == japanese {
+			return nil, errors.New("word with this Japanese text already exists")
+		}
+	}
+
+	return models.CreateWord(japanese, romaji, english, parts)
+}
+
 // GetWordReviews returns review history for a specific word
-func (s *WordService) GetWordReviews(wordID int64) ([]map[string]interface{}, error) {
+func (s *WordService) GetWordReviews(wordID int64) ([]models.WordReviewResponse, error) {
+	if wordID <= 0 {
+		return nil, errors.New("invalid word ID")
+	}
+
+	// First verify word exists
+	word, err := models.GetWord(wordID)
+	if err != nil {
+		return nil, err
+	}
+	if word == nil {
+		return nil, errors.New("word not found")
+	}
+
 	reviews, err := models.GetWordReviews(wordID)
 	if err != nil {
 		return nil, err
 	}
 
-	var result []map[string]interface{}
+	var responses []models.WordReviewResponse
 	for _, review := range reviews {
 		session, err := models.GetStudySession(review.StudySessionID)
 		if err != nil {
@@ -82,15 +148,15 @@ func (s *WordService) GetWordReviews(wordID int64) ([]map[string]interface{}, er
 			continue
 		}
 
-		result = append(result, map[string]interface{}{
-			"id":               review.ID,
-			"word_id":          review.WordID,
-			"study_session_id": review.StudySessionID,
-			"group_name":       group.Name,
-			"correct":          review.Correct,
-			"created_at":       review.CreatedAt,
+		responses = append(responses, models.WordReviewResponse{
+			ID:              review.ID,
+			WordID:          review.WordID,
+			StudySessionID:  review.StudySessionID,
+			GroupName:       group.Name,
+			Correct:         review.Correct,
+			CreatedAt:       review.CreatedAt,
 		})
 	}
 
-	return result, nil
+	return responses, nil
 }

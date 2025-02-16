@@ -15,21 +15,20 @@ type WordReview struct {
 }
 
 // CreateWordReview creates a new word review
-func CreateWordReview(wordID, studySessionID int64, correct bool) (*WordReview, error) {
-	var review WordReview
-	err := DB.QueryRow(`
+func CreateWordReview(tx *sql.Tx, wordID, studySessionID int64, correct bool) error {
+	query := `
 		INSERT INTO word_review_items (word_id, study_session_id, correct, created_at)
 		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-		RETURNING id, word_id, study_session_id, correct, created_at
-	`, wordID, studySessionID, correct).Scan(
-		&review.ID, &review.WordID, &review.StudySessionID, &review.Correct, &review.CreatedAt,
-	)
-
-	if err != nil {
-		return nil, err
+	`
+	
+	var err error
+	if tx != nil {
+		_, err = tx.Exec(query, wordID, studySessionID, correct)
+	} else {
+		_, err = DB.Exec(query, wordID, studySessionID, correct)
 	}
-
-	return &review, nil
+	
+	return err
 }
 
 // GetWordReview retrieves a word review by ID
@@ -102,10 +101,6 @@ func GetWordReviews(wordID int64) ([]*WordReview, error) {
 		reviews = append(reviews, &review)
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
 	return reviews, nil
 }
 
@@ -130,48 +125,41 @@ func GetWordReviewStats(wordID int64) (map[string]int, error) {
 	}
 
 	return map[string]int{
-		"total_reviews":   totalReviews,
-		"correct_reviews": correctReviews,
-		"success_rate":    successRate,
+		"total_reviews": totalReviews,
+		"success_rate":  successRate,
 	}, nil
 }
 
-// GetStudyProgress returns study progress statistics
-func GetStudyProgress() (map[string]int, error) {
-	var totalWords, studiedWords int
-	err := DB.QueryRow("SELECT COUNT(*) FROM words").Scan(&totalWords)
-	if err != nil {
-		return nil, err
-	}
-
-	err = DB.QueryRow(`
-		SELECT COUNT(DISTINCT word_id) 
+// GetRecentReviewsSuccessRate gets the success rate from recent reviews
+func GetRecentReviewsSuccessRate() (float64, error) {
+	var totalReviews, correctReviews int
+	err := DB.QueryRow(`
+		SELECT 
+			COUNT(*) as total_reviews,
+			SUM(CASE WHEN correct = 1 THEN 1 ELSE 0 END) as correct_reviews
 		FROM word_review_items
-	`).Scan(&studiedWords)
+		WHERE created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 30 DAY)
+	`).Scan(&totalReviews, &correctReviews)
+
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	var completionPercentage int
-	if totalWords > 0 {
-		completionPercentage = (studiedWords * 100) / totalWords
+	if totalReviews == 0 {
+		return 0, nil
 	}
 
-	return map[string]int{
-		"total_words":          totalWords,
-		"total_words_studied":  studiedWords,
-		"remaining_words":      totalWords - studiedWords,
-		"completion_percentage": completionPercentage,
-	}, nil
+	return float64(correctReviews) * 100 / float64(totalReviews), nil
 }
 
 // GetStudySessionWords returns all words reviewed in a study session
 func GetStudySessionWords(studySessionID int64) ([]Word, error) {
 	rows, err := DB.Query(`
-		SELECT DISTINCT w.*
+		SELECT DISTINCT w.id, w.japanese, w.romaji, w.english, w.parts
 		FROM words w
-		JOIN word_review_items wr ON w.id = wr.word_id
-		WHERE wr.study_session_id = ?
+		JOIN word_review_items wri ON w.id = wri.word_id
+		WHERE wri.study_session_id = ?
+		ORDER BY w.japanese
 	`, studySessionID)
 	if err != nil {
 		return nil, err

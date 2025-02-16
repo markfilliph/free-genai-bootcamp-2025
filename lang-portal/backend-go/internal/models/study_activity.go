@@ -2,138 +2,131 @@ package models
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 )
 
+// StudyActivity represents a study activity for a group of words
 type StudyActivity struct {
-	ID             int64     `json:"id"`
-	StudySessionID int64     `json:"study_session_id,omitempty"`
-	GroupID        int64     `json:"group_id"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID        int64     `json:"id"`
+	GroupID   int64     `json:"group_id"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
-// GetStudyActivity returns study activity by ID
-func GetStudyActivity(id int64) (*StudyActivity, error) {
-	var activity StudyActivity
-	err := DB.QueryRow(`
-		SELECT id, study_session_id, group_id, created_at
-		FROM study_activities
-		WHERE id = ?
-	`, id).Scan(&activity.ID, &activity.StudySessionID, &activity.GroupID, &activity.CreatedAt)
+// StudyActivityWithStats includes study activity data with additional statistics
+type StudyActivityWithStats struct {
+	StudyActivity
+	TotalSessions     int     `json:"total_sessions"`
+	TotalWords        int     `json:"total_words"`
+	AverageAccuracy   float64 `json:"average_accuracy"`
+	LastStudiedAt     *string `json:"last_studied_at,omitempty"`
+}
 
+// GetStudyActivity retrieves a study activity by ID with stats
+func GetStudyActivity(activityID int64) (*StudyActivityWithStats, error) {
+	db := GetDB()
+
+	// First get the basic activity info
+	var activity StudyActivityWithStats
+	err := db.QueryRow(`
+		SELECT id, group_id, created_at 
+		FROM study_activities 
+		WHERE id = ?`, activityID).Scan(&activity.ID, &activity.GroupID, &activity.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error querying study activity: %v", err)
 	}
 
-	return &activity, nil
-}
-
-// CreateStudyActivity creates a new study activity
-func CreateStudyActivity(groupID int64) (*StudyActivity, error) {
-	var activity StudyActivity
-	err := DB.QueryRow(`
-		INSERT INTO study_activities (group_id, created_at)
-		VALUES (?, CURRENT_TIMESTAMP)
-		RETURNING id, study_session_id, group_id, created_at
-	`, groupID).Scan(&activity.ID, &activity.StudySessionID, &activity.GroupID, &activity.CreatedAt)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &activity, nil
-}
-
-// GetRecentStudyActivities returns recent study activities for a group
-func GetRecentStudyActivities(groupID int64, limit int) ([]StudyActivity, error) {
-	rows, err := DB.Query(`
-		SELECT id, study_session_id, group_id, created_at
-		FROM study_activities
-		WHERE group_id = ?
-		ORDER BY created_at DESC
-		LIMIT ?
-	`, groupID, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var activities []StudyActivity
-	for rows.Next() {
-		var activity StudyActivity
-		err := rows.Scan(&activity.ID, &activity.StudySessionID, &activity.GroupID, &activity.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		activities = append(activities, activity)
-	}
-
-	return activities, nil
-}
-
-// GetStudyActivities returns all study activities
-func GetStudyActivities() ([]StudyActivity, error) {
-	rows, err := DB.Query(`
-		SELECT id, study_session_id, group_id, created_at
-		FROM study_activities
-		ORDER BY created_at DESC
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var activities []StudyActivity
-	for rows.Next() {
-		var activity StudyActivity
-		err := rows.Scan(&activity.ID, &activity.StudySessionID, &activity.GroupID, &activity.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		activities = append(activities, activity)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return activities, nil
-}
-
-// GetStudyActivityStats returns statistics for a study activity
-func GetStudyActivityStats(activityID int64) (map[string]int, error) {
-	var totalSessions, totalWords int
-	var successRate float64
-
-	// Get total sessions
-	err := DB.QueryRow(`
-		SELECT COUNT(DISTINCT s.id)
-		FROM study_sessions s
-		WHERE s.study_activity_id = ?
-	`, activityID).Scan(&totalSessions)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get total words and success rate
-	err = DB.QueryRow(`
+	// Get statistics
+	err = db.QueryRow(`
 		SELECT 
-			COUNT(DISTINCT wr.word_id) as total_words,
-			COALESCE(AVG(CASE WHEN wr.correct = 1 THEN 100 ELSE 0 END), 0) as success_rate
-		FROM word_review_items wr
-		JOIN study_sessions s ON wr.study_session_id = s.id
-		WHERE s.study_activity_id = ?
-	`, activityID).Scan(&totalWords, &successRate)
-	if err != nil {
-		return nil, err
+			COUNT(DISTINCT ss.id) as total_sessions,
+			COUNT(DISTINCT wri.word_id) as total_words,
+			COALESCE(AVG(CASE WHEN wri.correct THEN 1.0 ELSE 0.0 END), 0) as average_accuracy,
+			MAX(ss.created_at) as last_studied_at
+		FROM study_activities sa
+		LEFT JOIN study_sessions ss ON sa.id = ss.study_activity_id
+		LEFT JOIN word_review_items wri ON ss.id = wri.study_session_id
+		WHERE sa.id = ?
+		GROUP BY sa.id`, activityID).
+		Scan(&activity.TotalSessions, &activity.TotalWords, &activity.AverageAccuracy, &activity.LastStudiedAt)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("error getting study activity stats: %v", err)
 	}
 
-	return map[string]int{
-		"total_sessions": totalSessions,
-		"total_words":    totalWords,
-		"success_rate":   int(successRate),
+	return &activity, nil
+}
+
+// CreateStudyActivity creates a new study activity for a group
+func CreateStudyActivity(groupID int64) (*StudyActivity, error) {
+	db := GetDB()
+
+	// Verify group exists
+	exists, err := groupExists(groupID)
+	if err != nil {
+		return nil, fmt.Errorf("error checking group existence: %v", err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("group not found: %d", groupID)
+	}
+
+	// Create study activity
+	result, err := db.Exec(`
+		INSERT INTO study_activities (group_id, created_at)
+		VALUES (?, CURRENT_TIMESTAMP)`,
+		groupID)
+	if err != nil {
+		return nil, fmt.Errorf("error creating study activity: %v", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("error getting last insert ID: %v", err)
+	}
+
+	return &StudyActivity{
+		ID:      id,
+		GroupID: groupID,
 	}, nil
+}
+
+// GetStudyActivitySessions retrieves all study sessions for an activity
+func GetStudyActivitySessions(activityID int64) ([]StudySession, error) {
+	db := GetDB()
+
+	rows, err := db.Query(`
+		SELECT id, group_id, study_activity_id, created_at
+		FROM study_sessions
+		WHERE study_activity_id = ?
+		ORDER BY created_at DESC`, activityID)
+	if err != nil {
+		return nil, fmt.Errorf("error querying study sessions: %v", err)
+	}
+	defer rows.Close()
+
+	var sessions []StudySession
+	for rows.Next() {
+		var s StudySession
+		if err := rows.Scan(&s.ID, &s.GroupID, &s.StudyActivityID, &s.CreatedAt); err != nil {
+			return nil, fmt.Errorf("error scanning study session: %v", err)
+		}
+		sessions = append(sessions, s)
+	}
+
+	return sessions, nil
+}
+
+// groupExists checks if a group exists
+func groupExists(groupID int64) (bool, error) {
+	db := GetDB()
+
+	var exists bool
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM groups WHERE id = ?)", groupID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("error checking group existence: %v", err)
+	}
+
+	return exists, nil
 }

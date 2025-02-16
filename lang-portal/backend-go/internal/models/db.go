@@ -5,38 +5,36 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/joho/godotenv"
+	_ "github.com/mattn/go-sqlite3"
 )
 
-var DB *sql.DB
+var db *sql.DB
 
-// InitDB initializes the database connection
-func InitDB(dataSourceName string) error {
+// InitDB initializes the SQLite database connection
+func InitDB() error {
 	var err error
-	
-	// Load .env file if it exists
-	_ = godotenv.Load()
-	
-	// If no DSN provided, use environment variables or defaults
-	if dataSourceName == "" {
-		dataSourceName = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
-			getEnvOrDefault("DB_USER", "root"),
-			getEnvOrDefault("DB_PASSWORD", ""),
-			getEnvOrDefault("DB_HOST", "localhost"),
-			getEnvOrDefault("DB_PORT", "3306"),
-			getEnvOrDefault("DB_NAME", "lang_portal"),
-		)
-	}
 
-	DB, err = sql.Open("mysql", dataSourceName)
+	// Database file will be in the root of the project
+	dbPath := filepath.Join(".", "words.db")
+	log.Printf("Opening SQLite database at: %s", dbPath)
+
+	// Open SQLite database
+	db, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return fmt.Errorf("error opening database: %v", err)
 	}
 
-	if err = DB.Ping(); err != nil {
+	// Verify connection
+	if err = db.Ping(); err != nil {
 		return fmt.Errorf("error connecting to database: %v", err)
+	}
+
+	// Enable foreign keys
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	if err != nil {
+		return fmt.Errorf("error enabling foreign keys: %v", err)
 	}
 
 	log.Println("Database connection established")
@@ -44,25 +42,60 @@ func InitDB(dataSourceName string) error {
 }
 
 // GetDB returns the database connection
-func GetDB() (*sql.DB, error) {
-	if DB == nil {
-		return nil, fmt.Errorf("database connection not initialized")
-	}
-	return DB, nil
+func GetDB() *sql.DB {
+	return db
 }
 
 // CloseDB closes the database connection
 func CloseDB() error {
-	if DB != nil {
-		return DB.Close()
+	if db != nil {
+		return db.Close()
 	}
 	return nil
 }
 
-// Helper function to get environment variable with default fallback
-func getEnvOrDefault(key, defaultValue string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
+// RunMigrations runs the database migrations from the specified directory
+func RunMigrations() error {
+	if db == nil {
+		return fmt.Errorf("database not initialized")
 	}
-	return defaultValue
+
+	// Read migration file
+	migrationPath := filepath.Join("db", "migrations", "001_initial_schema.sql")
+	migration, err := os.ReadFile(migrationPath)
+	if err != nil {
+		return fmt.Errorf("error reading migration file: %v", err)
+	}
+
+	// Execute migration
+	_, err = db.Exec(string(migration))
+	if err != nil {
+		return fmt.Errorf("error executing migration: %v", err)
+	}
+
+	log.Println("Database migrations completed")
+	return nil
+}
+
+// RunSeeds runs the database seeds from the specified directory
+func RunSeeds() error {
+	if db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	// Read seed file
+	seedPath := filepath.Join("db", "seeds", "initial_data.sql")
+	seed, err := os.ReadFile(seedPath)
+	if err != nil {
+		return fmt.Errorf("error reading seed file: %v", err)
+	}
+
+	// Execute seed
+	_, err = db.Exec(string(seed))
+	if err != nil {
+		return fmt.Errorf("error executing seed: %v", err)
+	}
+
+	log.Println("Database seeding completed")
+	return nil
 }

@@ -1,151 +1,123 @@
 package service
 
 import (
+	"database/sql"
+	"errors"
+	"strings"
 	"lang-portal/internal/models"
 )
 
-// GroupServiceImpl handles business logic for group operations
-type GroupServiceImpl struct{}
+// GroupService handles business logic for group operations
+type GroupService struct {
+	db *sql.DB
+}
 
-// NewGroupServiceImpl creates a new group service
-func NewGroupServiceImpl() *GroupServiceImpl {
-	return &GroupServiceImpl{}
+// NewGroupService creates a new group service
+func NewGroupService(db *sql.DB) *GroupService {
+	return &GroupService{
+		db: db,
+	}
 }
 
 // GetGroups returns all groups with additional statistics
-func (s *GroupServiceImpl) GetGroups(offset, limit int) ([]map[string]interface{}, error) {
-	groups, err := models.GetGroups(offset, limit)
+func (s *GroupService) GetGroups(offset, limit int) ([]models.Group, error) {
+	if offset < 0 {
+		offset = 0
+	}
+	if limit < 0 {
+		limit = 0
+	}
+	return models.GetGroups(offset, limit)
+}
+
+// GetGroup returns details of a specific group
+func (s *GroupService) GetGroup(id int64) (*models.Group, error) {
+	if id <= 0 {
+		return nil, errors.New("invalid group ID")
+	}
+	return models.GetGroup(id)
+}
+
+// GetGroupWords returns all words in a group
+func (s *GroupService) GetGroupWords(groupID int64) ([]models.Word, error) {
+	if groupID <= 0 {
+		return nil, errors.New("invalid group ID")
+	}
+
+	// First verify group exists
+	group, err := models.GetGroup(groupID)
+	if err != nil {
+		return nil, err
+	}
+	if group == nil {
+		return nil, errors.New("group not found")
+	}
+
+	return models.GetGroupWords(groupID)
+}
+
+// GetGroupStudySessions returns study sessions for a group
+func (s *GroupService) GetGroupStudySessions(groupID int64) ([]models.StudySessionResponse, error) {
+	if groupID <= 0 {
+		return nil, errors.New("invalid group ID")
+	}
+
+	// First verify group exists
+	group, err := models.GetGroup(groupID)
+	if err != nil {
+		return nil, err
+	}
+	if group == nil {
+		return nil, errors.New("group not found")
+	}
+
+	sessions, err := models.GetStudySessionsByGroupID(groupID)
 	if err != nil {
 		return nil, err
 	}
 
-	var result []map[string]interface{}
-	for _, group := range groups {
-		stats, err := models.GetGroupStats(group.ID)
+	var responses []models.StudySessionResponse
+	for _, session := range sessions {
+		stats, err := models.GetStudySessionStats(session.ID)
 		if err != nil {
 			continue
 		}
 
-		result = append(result, map[string]interface{}{
-			"id":              group.ID,
-			"name":            group.Name,
-			"total_words":     stats.TotalWords,
-			"studied_words":   stats.StudiedWords,
-			"mastered_words":  stats.MasteredWords,
-			"study_sessions": stats.StudySessions,
+		responses = append(responses, models.StudySessionResponse{
+			ID:              session.ID,
+			GroupID:         session.GroupID,
+			GroupName:       group.Name,
+			StudyActivityID: session.StudyActivityID,
+			TotalWords:      stats["total"],
+			CorrectWords:    stats["correct"],
+			CreatedAt:       session.CreatedAt,
 		})
 	}
 
-	return result, nil
-}
-
-// GetGroup returns details of a specific group
-func (s *GroupServiceImpl) GetGroup(id int64) (map[string]interface{}, error) {
-	group, err := models.GetGroup(id)
-	if err != nil {
-		return nil, err
-	}
-
-	stats, err := models.GetGroupStats(group.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]interface{}{
-		"id":              group.ID,
-		"name":            group.Name,
-		"total_words":     stats.TotalWords,
-		"studied_words":   stats.StudiedWords,
-		"mastered_words":  stats.MasteredWords,
-		"study_sessions": stats.StudySessions,
-		"success_rate":    stats.SuccessRate,
-	}, nil
-}
-
-// GetGroupWords returns all words in a group with their study statistics
-func (s *GroupServiceImpl) GetGroupWords(groupID int64) ([]map[string]interface{}, error) {
-	words, err := models.GetGroupWords(groupID)
-	if err != nil {
-		return nil, err
-	}
-
-	var result []map[string]interface{}
-	for _, word := range words {
-		result = append(result, map[string]interface{}{
-			"id":       word.ID,
-			"japanese": word.Japanese,
-			"romaji":   word.Romaji,
-			"english":  word.English,
-			"parts":    word.Parts,
-		})
-	}
-
-	return result, nil
-}
-
-// GetGroupStudySessions returns study sessions for a group with detailed statistics
-func (s *GroupServiceImpl) GetGroupStudySessions(groupID int64) ([]map[string]interface{}, error) {
-	// Get the group first to ensure it exists
-	_, err := models.GetGroup(groupID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get study sessions for the group
-	sessions, err := models.GetStudySessionsByGroup(groupID, 0, 100) // Default pagination: first 100 sessions
-	if err != nil {
-		return nil, err
-	}
-
-	var result []map[string]interface{}
-	for _, session := range sessions {
-		// Get activity details
-		if session.StudyActivityID != nil {
-			_, err := models.GetStudyActivity(*session.StudyActivityID)
-			if err != nil {
-				continue
-			}
-
-			// Get session statistics
-			stats, err := models.GetStudySessionStats(session.ID)
-			if err != nil {
-				continue
-			}
-
-			result = append(result, map[string]interface{}{
-				"id":           session.ID,
-				"activity":     "Vocabulary Quiz", // Default activity type for now
-				"created_at":   session.CreatedAt,
-				"total_words":  stats["total_reviews"],
-				"correct":      stats["correct_reviews"],
-				"success_rate": stats["success_rate"],
-			})
-		}
-	}
-
-	return result, nil
+	return responses, nil
 }
 
 // CreateGroup creates a new group
-func (s *GroupServiceImpl) CreateGroup(name string) (map[string]interface{}, error) {
-	group, err := models.CreateGroup(name)
+func (s *GroupService) CreateGroup(name string) (*models.Group, error) {
+	// Validate input
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errors.New("group name cannot be empty")
+	}
+	if len(name) > 255 {
+		return nil, errors.New("group name too long")
+	}
+
+	// Check for duplicate name
+	groups, err := models.GetGroups(0, 0)
 	if err != nil {
 		return nil, err
 	}
-
-	stats, err := models.GetGroupStats(group.ID)
-	if err != nil {
-		return nil, err
+	for _, g := range groups {
+		if strings.EqualFold(g.Name, name) {
+			return nil, errors.New("group with this name already exists")
+		}
 	}
 
-	return map[string]interface{}{
-		"id":              group.ID,
-		"name":            group.Name,
-		"created_at":      group.CreatedAt,
-		"total_words":     stats.TotalWords,
-		"studied_words":   stats.StudiedWords,
-		"mastered_words":  stats.MasteredWords,
-		"study_sessions": stats.StudySessions,
-		"success_rate":    stats.SuccessRate,
-	}, nil
+	return models.CreateGroup(name)
 }

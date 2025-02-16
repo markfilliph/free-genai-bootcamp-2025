@@ -1,20 +1,25 @@
 package service
 
 import (
+	"database/sql"
 	"lang-portal/internal/models"
 	"time"
 )
 
 // DashboardService handles business logic for dashboard operations
-type DashboardService struct{}
+type DashboardService struct {
+	db *sql.DB
+}
 
 // NewDashboardService creates a new dashboard service
-func NewDashboardService() *DashboardService {
-	return &DashboardService{}
+func NewDashboardService(db *sql.DB) *DashboardService {
+	return &DashboardService{
+		db: db,
+	}
 }
 
 // GetLastStudySession returns the most recent study session with additional details
-func (s *DashboardService) GetLastStudySession() (map[string]interface{}, error) {
+func (s *DashboardService) GetLastStudySession() (*models.StudySessionResponse, error) {
 	session, err := models.GetLastStudySession()
 	if err != nil {
 		return nil, err
@@ -30,95 +35,122 @@ func (s *DashboardService) GetLastStudySession() (map[string]interface{}, error)
 		return nil, err
 	}
 
-	return map[string]interface{}{
-		"id":                session.ID,
-		"group_id":          session.GroupID,
-		"group_name":        group.Name,
-		"created_at":        session.CreatedAt,
-		"study_activity_id": session.StudyActivityID,
-		"total_words":       stats["total"],
-		"correct_words":     stats["correct"],
+	return &models.StudySessionResponse{
+		ID:                session.ID,
+		GroupID:          session.GroupID,
+		GroupName:        group.Name,
+		CreatedAt:        session.CreatedAt,
+		StudyActivityID:  session.StudyActivityID,
+		TotalWords:       stats["total"],
+		CorrectWords:     stats["correct"],
 	}, nil
 }
 
 // GetStudyProgress returns overall study progress statistics
-func (s *DashboardService) GetStudyProgress() (map[string]interface{}, error) {
-	stats, err := models.GetStudyProgress()
+func (s *DashboardService) GetStudyProgress() (*models.StudyProgressResponse, error) {
+	// Get total words count
+	totalWords, err := models.GetTotalWordsCount()
 	if err != nil {
 		return nil, err
 	}
 
-	return map[string]interface{}{
-		"total_words":          stats["total_words"],
-		"total_words_studied":  stats["total_words_studied"],
-		"remaining_words":      stats["remaining_words"],
-		"completion_percentage": stats["completion_percentage"],
+	// Get total studied words count
+	totalStudied, err := models.GetTotalStudiedWordsCount()
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate remaining and completion percentage
+	remaining := totalWords - totalStudied
+	var completionPercentage float64
+	if totalWords > 0 {
+		completionPercentage = (float64(totalStudied) / float64(totalWords)) * 100
+	}
+
+	return &models.StudyProgressResponse{
+		TotalWords:           totalWords,
+		TotalWordsStudied:    totalStudied,
+		RemainingWords:       remaining,
+		CompletionPercentage: completionPercentage,
 	}, nil
 }
 
 // GetQuickStats returns quick overview statistics
-func (s *DashboardService) GetQuickStats() (map[string]interface{}, error) {
-	// Get all sessions with a large limit
-	sessions, err := models.GetStudySessions(0, 1000)
+func (s *DashboardService) GetQuickStats() (*models.QuickStatsResponse, error) {
+	// Get success rate from recent reviews
+	successRate, err := models.GetRecentReviewsSuccessRate()
 	if err != nil {
 		return nil, err
 	}
 
-	// Get all groups
-	groups, err := models.GetGroups(0, 0) // Pass 0 for limit to get all groups
+	// Get total study sessions
+	totalSessions, err := models.GetTotalStudySessionsCount()
 	if err != nil {
 		return nil, err
 	}
 
-	// Calculate success rate from all word reviews
-	var totalCorrect, totalReviews int
-	for _, session := range sessions {
-		stats, err := models.GetStudySessionStats(session.ID)
-		if err != nil {
-			continue
-		}
-		totalCorrect += stats["correct"]
-		totalReviews += stats["total"]
-	}
-
-	var successRate float64
-	if totalReviews > 0 {
-		successRate = float64(totalCorrect) / float64(totalReviews) * 100
+	// Get total active groups (groups with study activity in last 30 days)
+	activeGroups, err := models.GetActiveGroupsCount(30)
+	if err != nil {
+		return nil, err
 	}
 
 	// Calculate study streak
-	streak := calculateStudyStreak(sessions)
+	streakDays, err := s.calculateStudyStreak()
+	if err != nil {
+		return nil, err
+	}
 
-	return map[string]interface{}{
-		"success_rate":         successRate,
-		"total_study_sessions": len(sessions),
-		"total_active_groups":  len(groups),
-		"study_streak_days":    streak,
+	return &models.QuickStatsResponse{
+		SuccessRate:        successRate,
+		TotalStudySessions: totalSessions,
+		TotalActiveGroups:  activeGroups,
+		StudyStreakDays:    streakDays,
 	}, nil
 }
 
-// calculateStudyStreak calculates the current study streak in days
-func calculateStudyStreak(sessions []*models.StudySession) int {
-	if len(sessions) == 0 {
-		return 0
+// Helper function to calculate study streak
+func (s *DashboardService) calculateStudyStreak() (int, error) {
+	// Get study sessions ordered by date
+	sessions, err := models.GetStudySessionsByDate()
+	if err != nil {
+		return 0, err
 	}
 
-	// Sort sessions by date (they should already be sorted)
-	today := time.Now().UTC().Truncate(24 * time.Hour)
-	streak := 0
-	lastDate := today
+	if len(sessions) == 0 {
+		return 0, nil
+	}
 
+	// Start from today and go backwards
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	streakDays := 0
+	lastStudyDate := today
+
+	// Check if studied today
+	hasStudiedToday := false
 	for _, session := range sessions {
 		sessionDate := session.CreatedAt.UTC().Truncate(24 * time.Hour)
-		if sessionDate.Equal(lastDate) {
-			continue
-		}
-		if sessionDate.Add(24 * time.Hour).Before(lastDate) {
+		if sessionDate.Equal(today) {
+			hasStudiedToday = true
 			break
 		}
-		streak++
-		lastDate = sessionDate
 	}
 
-	return streak
+	// If not studied today, start counting from yesterday
+	if !hasStudiedToday {
+		lastStudyDate = today.AddDate(0, 0, -1)
+	}
+
+	// Count consecutive days
+	for _, session := range sessions {
+		sessionDate := session.CreatedAt.UTC().Truncate(24 * time.Hour)
+		if sessionDate.Equal(lastStudyDate) {
+			streakDays++
+			lastStudyDate = sessionDate.AddDate(0, 0, -1)
+		} else if sessionDate.Before(lastStudyDate) {
+			break
+		}
+	}
+
+	return streakDays, nil
 }
