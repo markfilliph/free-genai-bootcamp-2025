@@ -46,3 +46,35 @@ func GetWord(c *gin.Context) {
 
 	c.JSON(http.StatusOK, word)
 }
+
+// ReviewWord handles word review in a study session
+func ReviewWord(c *gin.Context) {
+	sessionID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		respondWithError(c, http.StatusBadRequest, "Invalid session ID")
+		return
+	}
+
+	wordID, err := strconv.ParseInt(c.Param("word_id"), 10, 64)
+	if err != nil {
+		respondWithError(c, http.StatusBadRequest, "Invalid word ID")
+		return
+	}
+
+	var request struct {
+		Correct bool `json:"correct" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		respondWithError(c, http.StatusBadRequest, "Invalid request parameters")
+		return
+	}
+
+	review, err := models.CreateWordReview(wordID, sessionID, request.Correct)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, "Failed to record word review")
+		return
+	}
+
+	c.JSON(http.StatusOK, review)
+}

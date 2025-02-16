@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
-	"net/http"
 )
 
 // ErrorResponse represents a standard error response

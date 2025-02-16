@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"lang-portal/internal/models"
 	"net/http"
+	"time"
 )
 
 // GetLastStudySession returns information about the most recent study session
@@ -46,7 +47,8 @@ func GetStudyProgress(c *gin.Context) {
 // GetQuickStats returns quick overview statistics
 func GetQuickStats(c *gin.Context) {
 	// Get total study sessions
-	sessions, err := models.GetStudySessions()
+	const maxSessions = 100
+	sessions, err := models.GetStudySessions(0, maxSessions)
 	if err != nil {
 		respondWithError(c, http.StatusInternalServerError, "Failed to get study sessions")
 		return
@@ -81,4 +83,44 @@ func GetQuickStats(c *gin.Context) {
 		"total_active_groups":  len(groups),
 		"study_streak_days":    calculateStudyStreak(sessions),
 	})
+}
+
+// calculateStudyStreak calculates the current study streak in days
+func calculateStudyStreak(sessions []*models.StudySession) int {
+	if len(sessions) == 0 {
+		return 0
+	}
+
+	// Sort sessions by date in descending order (most recent first)
+	// Note: We assume sessions are already sorted by created_at DESC from the database
+
+	// Get today's date at midnight for comparison
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	
+	streak := 0
+	lastDate := today
+	
+	// Check each day, starting from today
+	for i := 0; i <= len(sessions); i++ {
+		hasStudyForDay := false
+		
+		// Look for any sessions on this day
+		for _, session := range sessions {
+			sessionDate := session.CreatedAt.Truncate(24 * time.Hour)
+			if sessionDate.Equal(lastDate) {
+				hasStudyForDay = true
+				break
+			}
+		}
+		
+		if !hasStudyForDay {
+			break
+		}
+		
+		streak++
+		lastDate = lastDate.AddDate(0, 0, -1) // Go back one day
+	}
+	
+	return streak
 }

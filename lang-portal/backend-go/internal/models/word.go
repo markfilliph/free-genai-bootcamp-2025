@@ -5,12 +5,16 @@ type Word struct {
 	Japanese string `json:"japanese"`
 	Romaji   string `json:"romaji"`
 	English  string `json:"english"`
-	Parts    string `json:"parts,omitempty"` // JSON field
+	Parts    string `json:"parts,omitempty"`
 }
 
 // GetWords returns all words
 func GetWords() ([]Word, error) {
-	rows, err := DB.Query("SELECT id, japanese, romaji, english, parts FROM words")
+	rows, err := DB.Query(`
+		SELECT id, japanese, romaji, english, parts
+		FROM words
+		ORDER BY japanese
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -19,19 +23,24 @@ func GetWords() ([]Word, error) {
 	var words []Word
 	for rows.Next() {
 		var w Word
-		if err := rows.Scan(&w.ID, &w.Japanese, &w.Romaji, &w.English, &w.Parts); err != nil {
+		err := rows.Scan(&w.ID, &w.Japanese, &w.Romaji, &w.English, &w.Parts)
+		if err != nil {
 			return nil, err
 		}
 		words = append(words, w)
 	}
+
 	return words, nil
 }
 
 // GetWord returns a single word by ID
 func GetWord(id int64) (*Word, error) {
 	var w Word
-	err := DB.QueryRow("SELECT id, japanese, romaji, english, parts FROM words WHERE id = ?", id).Scan(
-		&w.ID, &w.Japanese, &w.Romaji, &w.English, &w.Parts)
+	err := DB.QueryRow(`
+		SELECT id, japanese, romaji, english, parts
+		FROM words
+		WHERE id = ?
+	`, id).Scan(&w.ID, &w.Japanese, &w.Romaji, &w.English, &w.Parts)
 	if err != nil {
 		return nil, err
 	}
@@ -62,19 +71,13 @@ func CreateWord(japanese, romaji, english, parts string) (*Word, error) {
 		return nil, err
 	}
 
-	return &Word{
-		ID:       id,
-		Japanese: japanese,
-		Romaji:   romaji,
-		English:  english,
-		Parts:    parts,
-	}, nil
+	return GetWord(id)
 }
 
 // UpdateWord updates an existing word
 func UpdateWord(id int64, japanese, romaji, english, parts string) error {
 	_, err := DB.Exec(`
-		UPDATE words 
+		UPDATE words
 		SET japanese = ?, romaji = ?, english = ?, parts = ?
 		WHERE id = ?
 	`, japanese, romaji, english, parts, id)
@@ -89,67 +92,23 @@ func DeleteWord(id int64) error {
 	}
 	defer tx.Rollback()
 
-	// Delete from words_groups
-	_, err = tx.Exec("DELETE FROM words_groups WHERE word_id = ?", id)
-	if err != nil {
-		return err
-	}
-
-	// Delete from word_review_items
-	_, err = tx.Exec("DELETE FROM word_review_items WHERE word_id = ?", id)
+	// Delete word reviews
+	_, err = tx.Exec(`
+		DELETE FROM word_review_items
+		WHERE word_id = ?
+	`, id)
 	if err != nil {
 		return err
 	}
 
 	// Delete the word
-	_, err = tx.Exec("DELETE FROM words WHERE id = ?", id)
+	_, err = tx.Exec(`
+		DELETE FROM words
+		WHERE id = ?
+	`, id)
 	if err != nil {
 		return err
 	}
 
 	return tx.Commit()
-}
-
-// GetWordGroups returns all groups that contain this word
-func GetWordGroups(wordID int64) ([]Group, error) {
-	query := `
-		SELECT g.id, g.name
-		FROM groups g
-		JOIN words_groups wg ON g.id = wg.group_id
-		WHERE wg.word_id = ?
-	`
-	rows, err := DB.Query(query, wordID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var groups []Group
-	for rows.Next() {
-		var g Group
-		if err := rows.Scan(&g.ID, &g.Name); err != nil {
-			return nil, err
-		}
-		groups = append(groups, g)
-	}
-	return groups, nil
-}
-
-// GetWordReviewStats returns review statistics for a word
-func GetWordReviewStats(wordID int64) (map[string]int, error) {
-	var totalReviews, correctReviews int
-
-	err := DB.QueryRow(`
-		SELECT COUNT(*), SUM(CASE WHEN correct THEN 1 ELSE 0 END)
-		FROM word_review_items
-		WHERE word_id = ?
-	`, wordID).Scan(&totalReviews, &correctReviews)
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]int{
-		"total_reviews":   totalReviews,
-		"correct_reviews": correctReviews,
-	}, nil
 }

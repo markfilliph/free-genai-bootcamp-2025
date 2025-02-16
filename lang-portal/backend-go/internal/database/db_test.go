@@ -5,11 +5,15 @@ import (
 )
 
 func TestDatabaseConnection(t *testing.T) {
-	db, err := InitDB()
-	if err != nil {
-		t.Fatalf("Failed to connect to database: %v", err)
+	if err := InitDB(); err != nil {
+		t.Fatalf("Failed to initialize database: %v", err)
 	}
-	defer db.Close()
+	defer CloseDB()
+
+	db, err := GetDB()
+	if err != nil {
+		t.Fatalf("Failed to get database connection: %v", err)
+	}
 
 	// Test that we can execute a simple query
 	var version string

@@ -79,53 +79,42 @@ func GetGroupWords(c *gin.Context) {
 
 // GetGroupStudySessions returns study sessions for a group
 func GetGroupStudySessions(c *gin.Context) {
-	groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		respondWithError(c, http.StatusBadRequest, "Invalid group ID")
 		return
 	}
 
-	pagination := getPaginationParams(c)
-
-	sessions, err := models.GetStudySessions()
+	// Get study sessions for the group
+	sessions, err := models.GetStudySessionsByGroupID(id)
 	if err != nil {
 		respondWithError(c, http.StatusInternalServerError, "Failed to get study sessions")
 		return
 	}
 
-	// Filter sessions by group ID
-	var groupSessions []models.StudySession
-	for _, s := range sessions {
-		if s.GroupID == groupID {
-			groupSessions = append(groupSessions, s)
-		}
+	type EnrichedSession struct {
+		*models.StudySession
+		Activity *models.StudyActivity `json:"activity,omitempty"`
 	}
 
-	// Paginate filtered sessions
-	start := (pagination.Page - 1) * pagination.PageSize
-	end := start + pagination.PageSize
-	if end > len(groupSessions) {
-		end = len(groupSessions)
-	}
-
-	var filteredSessions []gin.H
-	for _, s := range groupSessions[start:end] {
-		stats, err := models.GetStudySessionStats(s.ID)
-		if err != nil {
-			continue
+	enrichedSessions := make([]EnrichedSession, len(sessions))
+	for i, session := range sessions {
+		enrichedSession := EnrichedSession{
+			StudySession: session,
 		}
 
-		filteredSessions = append(filteredSessions, gin.H{
-			"id":           s.ID,
-			"created_at":   s.CreatedAt,
-			"total_words": stats["total"],
-			"correct":     stats["correct"],
-		})
+		// Only get activity if StudyActivityID is not nil
+		if session.StudyActivityID != nil {
+			activity, err := models.GetStudyActivity(*session.StudyActivityID)
+			if err != nil {
+				respondWithError(c, http.StatusInternalServerError, "Failed to get study activity")
+				return
+			}
+			enrichedSession.Activity = activity
+		}
+
+		enrichedSessions[i] = enrichedSession
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"group_id":   groupID,
-		"items":      filteredSessions,
-		"pagination": calculatePagination(pagination.Page, pagination.PageSize, len(groupSessions)),
-	})
+	c.JSON(http.StatusOK, enrichedSessions)
 }
