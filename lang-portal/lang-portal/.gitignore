@@ -1,0 +1,30 @@
+# Environment variables
+.env
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+query
+wsl*
+
+# Go specific
+*.exe
+*.test
+*.out
+/vendor/
+/bin/
+
+# Logs
+*.log
+
+# Database files
+*.db
+*.sqlite
