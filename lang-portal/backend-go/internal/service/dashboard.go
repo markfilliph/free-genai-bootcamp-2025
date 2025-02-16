@@ -59,7 +59,7 @@ func (s *DashboardService) GetDashboardStats() (*DashboardStats, error) {
 	stats.TotalWords = totalWords
 
 	// Get total groups count
-	_, total, err := models.GetGroups(1)
+	_, total, err := models.GetGroups(1, 10, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to count groups: %v", err)
 	}
@@ -141,9 +141,9 @@ func (s *DashboardService) GetGroupDashboard(groupID int64) (*GroupStats, error)
 	}
 
 	// Get group words
-	words, err := models.GetGroupWords(groupID)
+	words, _, err := models.GetGroupWords(groupID, 1, 100)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get group words: %v", err)
+		return nil, fmt.Errorf("error getting group words: %v", err)
 	}
 
 	// Get group sessions
@@ -220,9 +220,9 @@ func (s *DashboardService) getRecentProgress(limit int) ([]*models.StudySession,
 
 func (s *DashboardService) getTopGroups(limit int) ([]GroupStats, error) {
 	// Get all groups
-	groups, _, err := models.GetGroups(1)
+	groups, _, err := models.GetGroups(1, 10, "")
 	if err != nil {
-		return nil, fmt.Errorf("failed to list groups: %v", err)
+		return nil, fmt.Errorf("error getting groups: %v", err)
 	}
 
 	// Calculate stats for each group

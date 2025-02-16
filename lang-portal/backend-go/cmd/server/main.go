@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"lang-portal/internal/cache"
 	"lang-portal/internal/handlers"
 	"lang-portal/internal/logger"
 	"lang-portal/internal/middleware"
@@ -53,6 +54,12 @@ func main() {
 		logger.Fatal("Failed to initialize database", logger.Fields{"error": err.Error()})
 	}
 	defer models.CloseDB()
+
+	// Initialize Redis
+	if err := cache.Initialize(); err != nil {
+		log.Printf("Warning: Failed to initialize Redis cache: %v", err)
+		log.Println("Continuing without caching...")
+	}
 
 	// Initialize services
 	dashboardService = service.NewDashboardService()

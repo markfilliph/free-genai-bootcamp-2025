@@ -8,11 +8,117 @@ import (
 )
 
 // StudySessionService handles business logic for study sessions
-type StudySessionService struct{}
+type StudySessionService struct {
+	// Add any dependencies here
+}
 
 // NewStudySessionService creates a new StudySessionService
 func NewStudySessionService() *StudySessionService {
 	return &StudySessionService{}
+}
+
+// CreateStudySession creates a new study session
+func (s *StudySessionService) CreateStudySession(groupID, activityID int64) (*models.StudySession, error) {
+	now := time.Now()
+	session := &models.StudySession{
+		GroupID:         &groupID,
+		StudyActivityID: &activityID,
+		StartTime:       &now,
+		CreatedAt:       &now,
+	}
+
+	if err := models.CreateStudySession(session); err != nil {
+		return nil, fmt.Errorf("error creating study session: %v", err)
+	}
+
+	return session, nil
+}
+
+// GetStudySession retrieves a study session by ID
+func (s *StudySessionService) GetStudySession(id int64) (*models.StudySession, error) {
+	session, err := models.GetStudySession(id)
+	if err != nil {
+		return nil, fmt.Errorf("error getting study session: %v", err)
+	}
+	if session == nil {
+		return nil, fmt.Errorf("study session not found: %d", id)
+	}
+	return session, nil
+}
+
+// GetStudySessionsByGroup retrieves study sessions for a group with pagination
+func (s *StudySessionService) GetStudySessionsByGroup(groupID int64, offset, limit int) ([]*models.StudySession, error) {
+	sessions, err := models.GetStudySessionsByGroup(groupID, offset, limit)
+	if err != nil {
+		return nil, fmt.Errorf("error getting study sessions: %v", err)
+	}
+	return sessions, nil
+}
+
+// GetStudySessionsByActivity retrieves study sessions for an activity with pagination
+func (s *StudySessionService) GetStudySessionsByActivity(activityID int64, offset, limit int) ([]*models.StudySession, error) {
+	sessions, err := models.GetStudySessionsByActivity(activityID, offset, limit)
+	if err != nil {
+		return nil, fmt.Errorf("error getting study sessions: %v", err)
+	}
+	return sessions, nil
+}
+
+// CreateWordReview creates a word review for a study session
+func (s *StudySessionService) CreateWordReview(sessionID, wordID int64, correct bool) error {
+	now := time.Now()
+	review := &models.WordReview{
+		WordID:         &wordID,
+		StudySessionID: &sessionID,
+		Correct:        correct,
+		CreatedAt:      &now,
+	}
+
+	if err := models.CreateWordReview(review); err != nil {
+		return fmt.Errorf("error creating word review: %v", err)
+	}
+
+	return nil
+}
+
+// CreateWordReviews creates multiple word reviews for a study session
+func (s *StudySessionService) CreateWordReviews(sessionID int64, items []*models.WordReviewItem) error {
+	// Convert items to reviews
+	var reviews []*models.WordReview
+	for _, item := range items {
+		now := time.Now()
+		review := &models.WordReview{
+			WordID:         item.WordID,
+			StudySessionID: &sessionID,
+			Correct:        item.Correct,
+			CreatedAt:      &now,
+		}
+		reviews = append(reviews, review)
+	}
+
+	// Create reviews in a transaction
+	if err := models.CreateWordReviewsByActivity(sessionID, items); err != nil {
+		return fmt.Errorf("error creating word reviews: %v", err)
+	}
+	return nil
+}
+
+// GetWordReviewsBySession retrieves all word reviews for a study session
+func (s *StudySessionService) GetWordReviewsBySession(sessionID int64) ([]*models.WordReview, error) {
+	reviews, err := models.GetWordReviewsBySession(sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting word reviews: %v", err)
+	}
+	return reviews, nil
+}
+
+// GetWordReviewsByWord retrieves all reviews for a word
+func (s *StudySessionService) GetWordReviewsByWord(wordID int64) ([]*models.WordReview, error) {
+	reviews, err := models.GetWordReviewsByWord(wordID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting word reviews: %v", err)
+	}
+	return reviews, nil
 }
 
 // GetSession retrieves a study session by ID with stats
@@ -174,7 +280,7 @@ func (s *StudySessionService) GetSessionStats(sessionID int64) (*models.StudySes
 		ID:              session.ID,
 		GroupID:         session.GroupID,
 		GroupName:       group.Name,
-		StudyActivityID: &session.StudyActivityID,
+		StudyActivityID: session.StudyActivityID,
 		TotalWords:      len(reviews),
 		CorrectWords:    correctWords,
 		CreatedAt:       session.CreatedAt,

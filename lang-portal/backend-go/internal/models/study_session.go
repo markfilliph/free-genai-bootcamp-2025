@@ -8,10 +8,12 @@ import (
 
 // StudySession represents a single study session
 type StudySession struct {
-	ID              int64     `json:"id"`
-	GroupID         int64     `json:"group_id"`
-	StudyActivityID int64     `json:"study_activity_id"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID              *int64     `json:"id"`
+	GroupID         *int64     `json:"group_id"`
+	StudyActivityID *int64     `json:"study_activity_id"`
+	StartTime       *time.Time `json:"start_time"`
+	EndTime         *time.Time `json:"end_time,omitempty"`
+	CreatedAt       *time.Time `json:"created_at"`
 }
 
 // StudySessionWithStats includes study session data with statistics
@@ -26,40 +28,42 @@ type StudySessionWithStats struct {
 }
 
 // CreateStudySession creates a new study session
-func CreateStudySession(groupID int64) (*StudySession, error) {
-	var session StudySession
-	err := DB.QueryRow(`
-		INSERT INTO study_sessions (group_id, created_at)
-		VALUES (?, CURRENT_TIMESTAMP)
-		RETURNING id, group_id, created_at
-	`, groupID).Scan(&session.ID, &session.GroupID, &session.CreatedAt)
-
+func CreateStudySession(session *StudySession) error {
+	result, err := GetDB().Exec(`
+		INSERT INTO study_sessions (group_id, study_activity_id, start_time, end_time, created_at)
+		VALUES (?, ?, ?, ?, ?)`,
+		session.GroupID, session.StudyActivityID,
+		session.StartTime, session.EndTime,
+		session.CreatedAt)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("error creating study session: %v", err)
 	}
 
-	return &session, nil
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("error getting last insert id: %v", err)
+	}
+
+	session.ID = &id
+	return nil
 }
 
 // GetStudySession retrieves a study session by ID
 func GetStudySession(id int64) (*StudySession, error) {
 	var session StudySession
-	var studyActivityID sql.NullInt64
-	err := DB.QueryRow(`
-		SELECT id, group_id, study_activity_id, created_at
+	err := GetDB().QueryRow(`
+		SELECT id, group_id, study_activity_id, start_time, end_time, created_at
 		FROM study_sessions
-		WHERE id = ?
-	`, id).Scan(&session.ID, &session.GroupID, &studyActivityID, &session.CreatedAt)
+		WHERE id = ?`, id).Scan(
+		&session.ID, &session.GroupID,
+		&session.StudyActivityID, &session.StartTime,
+		&session.EndTime, &session.CreatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
-	}
-
-	if studyActivityID.Valid {
-		session.StudyActivityID = studyActivityID.Int64
+		return nil, fmt.Errorf("error getting study session: %v", err)
 	}
 
 	return &session, nil
@@ -67,8 +71,8 @@ func GetStudySession(id int64) (*StudySession, error) {
 
 // GetStudySessions retrieves all study sessions with pagination
 func GetStudySessions(offset, limit int) ([]*StudySession, error) {
-	rows, err := DB.Query(`
-		SELECT id, group_id, study_activity_id, created_at
+	rows, err := GetDB().Query(`
+		SELECT id, group_id, study_activity_id, start_time, end_time, created_at
 		FROM study_sessions
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
@@ -81,13 +85,9 @@ func GetStudySessions(offset, limit int) ([]*StudySession, error) {
 	var sessions []*StudySession
 	for rows.Next() {
 		var session StudySession
-		var studyActivityID sql.NullInt64
-		err := rows.Scan(&session.ID, &session.GroupID, &studyActivityID, &session.CreatedAt)
+		err := rows.Scan(&session.ID, &session.GroupID, &session.StudyActivityID, &session.StartTime, &session.EndTime, &session.CreatedAt)
 		if err != nil {
 			return nil, err
-		}
-		if studyActivityID.Valid {
-			session.StudyActivityID = studyActivityID.Int64
 		}
 		sessions = append(sessions, &session)
 	}
@@ -97,8 +97,8 @@ func GetStudySessions(offset, limit int) ([]*StudySession, error) {
 
 // GetStudySessionsByGroup retrieves study sessions for a specific group
 func GetStudySessionsByGroup(groupID int64, offset, limit int) ([]*StudySession, error) {
-	rows, err := DB.Query(`
-		SELECT id, group_id, study_activity_id, created_at
+	rows, err := GetDB().Query(`
+		SELECT id, group_id, study_activity_id, start_time, end_time, created_at
 		FROM study_sessions
 		WHERE group_id = ?
 		ORDER BY created_at DESC
@@ -112,13 +112,9 @@ func GetStudySessionsByGroup(groupID int64, offset, limit int) ([]*StudySession,
 	var sessions []*StudySession
 	for rows.Next() {
 		var session StudySession
-		var studyActivityID sql.NullInt64
-		err := rows.Scan(&session.ID, &session.GroupID, &studyActivityID, &session.CreatedAt)
+		err := rows.Scan(&session.ID, &session.GroupID, &session.StudyActivityID, &session.StartTime, &session.EndTime, &session.CreatedAt)
 		if err != nil {
 			return nil, err
-		}
-		if studyActivityID.Valid {
-			session.StudyActivityID = studyActivityID.Int64
 		}
 		sessions = append(sessions, &session)
 	}
@@ -128,8 +124,8 @@ func GetStudySessionsByGroup(groupID int64, offset, limit int) ([]*StudySession,
 
 // GetStudySessionsByGroupID retrieves all study sessions for a specific group
 func GetStudySessionsByGroupID(groupID int64) ([]*StudySession, error) {
-	rows, err := DB.Query(`
-		SELECT id, group_id, study_activity_id, created_at
+	rows, err := GetDB().Query(`
+		SELECT id, group_id, study_activity_id, start_time, end_time, created_at
 		FROM study_sessions
 		WHERE group_id = ?
 		ORDER BY created_at DESC
@@ -142,13 +138,9 @@ func GetStudySessionsByGroupID(groupID int64) ([]*StudySession, error) {
 	var sessions []*StudySession
 	for rows.Next() {
 		var session StudySession
-		var studyActivityID sql.NullInt64
-		err := rows.Scan(&session.ID, &session.GroupID, &studyActivityID, &session.CreatedAt)
+		err := rows.Scan(&session.ID, &session.GroupID, &session.StudyActivityID, &session.StartTime, &session.EndTime, &session.CreatedAt)
 		if err != nil {
 			return nil, err
-		}
-		if studyActivityID.Valid {
-			session.StudyActivityID = studyActivityID.Int64
 		}
 		sessions = append(sessions, &session)
 	}
@@ -163,28 +155,24 @@ func GetStudySessionsByGroupID(groupID int64) ([]*StudySession, error) {
 // GetLastStudySession returns the most recent study session
 func GetLastStudySession() (*StudySession, error) {
 	var s StudySession
-	var studyActivityID sql.NullInt64
-	err := DB.QueryRow(`
-		SELECT id, group_id, study_activity_id, created_at 
+	err := GetDB().QueryRow(`
+		SELECT id, group_id, study_activity_id, start_time, end_time, created_at 
 		FROM study_sessions 
 		ORDER BY created_at DESC 
 		LIMIT 1
-	`).Scan(&s.ID, &s.GroupID, &studyActivityID, &s.CreatedAt)
+	`).Scan(&s.ID, &s.GroupID, &s.StudyActivityID, &s.StartTime, &s.EndTime, &s.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if studyActivityID.Valid {
-		s.StudyActivityID = studyActivityID.Int64
-	}
 	return &s, nil
 }
 
 // UpdateStudyActivityID updates the study activity ID for a session
 func (s *StudySession) UpdateStudyActivityID(activityID int64) error {
-	_, err := DB.Exec(`
+	_, err := GetDB().Exec(`
 		UPDATE study_sessions
 		SET study_activity_id = ?
 		WHERE id = ?
@@ -193,13 +181,13 @@ func (s *StudySession) UpdateStudyActivityID(activityID int64) error {
 		return err
 	}
 
-	s.StudyActivityID = activityID
+	s.StudyActivityID = &activityID
 	return nil
 }
 
 // LinkStudyActivityToSession links a study activity to a study session
 func LinkStudyActivityToSession(activityID, studySessionID int64) error {
-	tx, err := DB.Begin()
+	tx, err := GetDB().Begin()
 	if err != nil {
 		return err
 	}
@@ -231,7 +219,7 @@ func LinkStudyActivityToSession(activityID, studySessionID int64) error {
 // GetStudySessionStats returns statistics for a study session
 func GetStudySessionStats(sessionID int64) (map[string]int, error) {
 	var total, correct int
-	err := DB.QueryRow(`
+	err := GetDB().QueryRow(`
 		SELECT 
 			COUNT(*) as total,
 			SUM(CASE WHEN correct = 1 THEN 1 ELSE 0 END) as correct
@@ -258,12 +246,12 @@ func GetStudySessionStats(sessionID int64) (map[string]int, error) {
 // GetStudySessionByActivityID retrieves a study session by activity ID
 func GetStudySessionByActivityID(activityID int64) (*StudySession, error) {
 	var session StudySession
-	err := DB.QueryRow(`
-		SELECT id, group_id, study_activity_id, created_at
+	err := GetDB().QueryRow(`
+		SELECT id, group_id, study_activity_id, start_time, end_time, created_at
 		FROM study_sessions
 		WHERE study_activity_id = ?
 		LIMIT 1
-	`, activityID).Scan(&session.ID, &session.GroupID, &session.StudyActivityID, &session.CreatedAt)
+	`, activityID).Scan(&session.ID, &session.GroupID, &session.StudyActivityID, &session.StartTime, &session.EndTime, &session.CreatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -275,10 +263,10 @@ func GetStudySessionByActivityID(activityID int64) (*StudySession, error) {
 	return &session, nil
 }
 
-// GetStudySessionsByActivity returns study sessions for a specific activity with pagination
+// GetStudySessionsByActivity retrieves study sessions for a specific activity with pagination
 func GetStudySessionsByActivity(activityID int64, offset, limit int) ([]*StudySession, error) {
-	rows, err := DB.Query(`
-		SELECT id, group_id, study_activity_id, created_at
+	rows, err := GetDB().Query(`
+		SELECT id, group_id, study_activity_id, start_time, end_time, created_at
 		FROM study_sessions
 		WHERE study_activity_id = ?
 		ORDER BY created_at DESC
@@ -292,7 +280,7 @@ func GetStudySessionsByActivity(activityID int64, offset, limit int) ([]*StudySe
 	var sessions []*StudySession
 	for rows.Next() {
 		var session StudySession
-		err := rows.Scan(&session.ID, &session.GroupID, &session.StudyActivityID, &session.CreatedAt)
+		err := rows.Scan(&session.ID, &session.GroupID, &session.StudyActivityID, &session.StartTime, &session.EndTime, &session.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -309,7 +297,7 @@ func GetStudySessionsByActivity(activityID int64, offset, limit int) ([]*StudySe
 // GetTotalStudySessionsByActivity returns the total count of study sessions for an activity
 func GetTotalStudySessionsByActivity(activityID int64) (int, error) {
 	var count int
-	err := DB.QueryRow(`
+	err := GetDB().QueryRow(`
 		SELECT COUNT(*)
 		FROM study_sessions
 		WHERE study_activity_id = ?
@@ -322,8 +310,8 @@ func GetTotalStudySessionsByActivity(activityID int64) (int, error) {
 
 // GetStudySessionsByActivityID retrieves all study sessions for a specific activity
 func GetStudySessionsByActivityID(activityID int64) ([]*StudySession, error) {
-	rows, err := DB.Query(`
-		SELECT id, group_id, study_activity_id, created_at
+	rows, err := GetDB().Query(`
+		SELECT id, group_id, study_activity_id, start_time, end_time, created_at
 		FROM study_sessions
 		WHERE study_activity_id = ?
 		ORDER BY created_at DESC
@@ -336,13 +324,9 @@ func GetStudySessionsByActivityID(activityID int64) ([]*StudySession, error) {
 	var sessions []*StudySession
 	for rows.Next() {
 		var session StudySession
-		var studyActivityID sql.NullInt64
-		err := rows.Scan(&session.ID, &session.GroupID, &studyActivityID, &session.CreatedAt)
+		err := rows.Scan(&session.ID, &session.GroupID, &session.StudyActivityID, &session.StartTime, &session.EndTime, &session.CreatedAt)
 		if err != nil {
 			return nil, err
-		}
-		if studyActivityID.Valid {
-			session.StudyActivityID = studyActivityID.Int64
 		}
 		sessions = append(sessions, &session)
 	}
@@ -352,8 +336,8 @@ func GetStudySessionsByActivityID(activityID int64) ([]*StudySession, error) {
 
 // GetStudySessionsByDate returns all study sessions ordered by date
 func GetStudySessionsByDate() ([]*StudySession, error) {
-	rows, err := DB.Query(`
-		SELECT id, group_id, study_activity_id, created_at
+	rows, err := GetDB().Query(`
+		SELECT id, group_id, study_activity_id, start_time, end_time, created_at
 		FROM study_sessions
 		ORDER BY created_at DESC
 	`)
@@ -365,13 +349,9 @@ func GetStudySessionsByDate() ([]*StudySession, error) {
 	var sessions []*StudySession
 	for rows.Next() {
 		var session StudySession
-		var studyActivityID sql.NullInt64
-		err := rows.Scan(&session.ID, &session.GroupID, &studyActivityID, &session.CreatedAt)
+		err := rows.Scan(&session.ID, &session.GroupID, &session.StudyActivityID, &session.StartTime, &session.EndTime, &session.CreatedAt)
 		if err != nil {
 			return nil, err
-		}
-		if studyActivityID.Valid {
-			session.StudyActivityID = studyActivityID.Int64
 		}
 		sessions = append(sessions, &session)
 	}
@@ -382,7 +362,7 @@ func GetStudySessionsByDate() ([]*StudySession, error) {
 // GetTotalWordsCount returns the total number of words in the system
 func GetTotalWordsCount() (int, error) {
 	var count int
-	err := DB.QueryRow("SELECT COUNT(*) FROM words").Scan(&count)
+	err := GetDB().QueryRow("SELECT COUNT(*) FROM words").Scan(&count)
 	if err != nil {
 		return 0, err
 	}
@@ -392,7 +372,7 @@ func GetTotalWordsCount() (int, error) {
 // GetTotalStudiedWordsCount returns the total number of words that have been studied
 func GetTotalStudiedWordsCount() (int, error) {
 	var count int
-	err := DB.QueryRow(`
+	err := GetDB().QueryRow(`
 		SELECT COUNT(DISTINCT word_id)
 		FROM word_review_items
 	`).Scan(&count)
@@ -405,7 +385,7 @@ func GetTotalStudiedWordsCount() (int, error) {
 // GetTotalStudySessionsCount returns the total number of study sessions
 func GetTotalStudySessionsCount() (int, error) {
 	var count int
-	err := DB.QueryRow("SELECT COUNT(*) FROM study_sessions").Scan(&count)
+	err := GetDB().QueryRow("SELECT COUNT(*) FROM study_sessions").Scan(&count)
 	if err != nil {
 		return 0, err
 	}
@@ -415,7 +395,7 @@ func GetTotalStudySessionsCount() (int, error) {
 // GetActiveGroupsCount returns the number of groups with study activity in the last N days
 func GetActiveGroupsCount(days int) (int, error) {
 	var count int
-	err := DB.QueryRow(`
+	err := GetDB().QueryRow(`
 		SELECT COUNT(DISTINCT g.id)
 		FROM word_groups g
 		JOIN study_sessions s ON g.id = s.group_id

@@ -9,10 +9,11 @@ import (
 
 // Group represents a collection of words
 type Group struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // GroupStats represents statistics for a word group
@@ -30,13 +31,13 @@ type GroupStats struct {
 }
 
 // GetGroups retrieves a paginated list of groups with optional filtering
-func GetGroups(page, pageSize int, search string) ([]Group, int, error) {
+func GetGroups(page, pageSize int, search string) ([]*Group, int, error) {
 	offset := (page - 1) * pageSize
 
 	// Base query with pagination
 	query := `
 		SELECT SQL_CALC_FOUND_ROWS 
-			id, name, created_at, updated_at
+			id, name, description, created_at, updated_at
 		FROM word_groups
 		WHERE 1=1
 	`
@@ -44,8 +45,9 @@ func GetGroups(page, pageSize int, search string) ([]Group, int, error) {
 
 	// Add search condition if provided
 	if search != "" {
-		query += " AND name LIKE ?"
-		args = append(args, "%"+search+"%")
+		query += " AND (name LIKE ? OR description LIKE ?)"
+		searchTerm := "%" + search + "%"
+		args = append(args, searchTerm, searchTerm)
 	}
 
 	// Add ordering and pagination
@@ -63,13 +65,13 @@ func GetGroups(page, pageSize int, search string) ([]Group, int, error) {
 	}
 	defer rows.Close()
 
-	var groups []Group
+	var groups []*Group
 	for rows.Next() {
 		var g Group
-		if err := rows.Scan(&g.ID, &g.Name, &g.CreatedAt, &g.UpdatedAt); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.CreatedAt, &g.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("error scanning group: %v", err)
 		}
-		groups = append(groups, g)
+		groups = append(groups, &g)
 	}
 
 	// Get total count
@@ -88,9 +90,9 @@ func GetGroup(groupID int64) (*Group, error) {
 
 	var g Group
 	err := db.QueryRow(`
-		SELECT id, name, created_at, updated_at 
+		SELECT id, name, description, created_at, updated_at 
 		FROM word_groups 
-		WHERE id = ?`, groupID).Scan(&g.ID, &g.Name, &g.CreatedAt, &g.UpdatedAt)
+		WHERE id = ?`, groupID).Scan(&g.ID, &g.Name, &g.Description, &g.CreatedAt, &g.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -103,19 +105,20 @@ func GetGroup(groupID int64) (*Group, error) {
 
 // CreateGroup creates a new group
 func CreateGroup(g *Group) error {
-	db := GetDB()
+	g.CreatedAt = time.Now()
+	g.UpdatedAt = time.Now()
 
-	result, err := db.Exec(`
-		INSERT INTO word_groups (name, created_at, updated_at)
-		VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-		g.Name)
+	result, err := GetDB().Exec(`
+		INSERT INTO word_groups (name, description, created_at, updated_at)
+		VALUES (?, ?, ?, ?)`,
+		g.Name, g.Description, g.CreatedAt, g.UpdatedAt)
 	if err != nil {
-		return fmt.Errorf("error inserting group: %v", err)
+		return fmt.Errorf("error creating group: %v", err)
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		return fmt.Errorf("error getting last insert ID: %v", err)
+		return fmt.Errorf("error getting last insert id: %v", err)
 	}
 
 	g.ID = id
@@ -124,13 +127,13 @@ func CreateGroup(g *Group) error {
 
 // UpdateGroup updates an existing group
 func UpdateGroup(g *Group) error {
-	db := GetDB()
+	g.UpdatedAt = time.Now()
 
-	result, err := db.Exec(`
+	result, err := GetDB().Exec(`
 		UPDATE word_groups 
-		SET name = ?, updated_at = CURRENT_TIMESTAMP
+		SET name = ?, description = ?, updated_at = ?
 		WHERE id = ?`,
-		g.Name, g.ID)
+		g.Name, g.Description, g.UpdatedAt, g.ID)
 	if err != nil {
 		return fmt.Errorf("error updating group: %v", err)
 	}
