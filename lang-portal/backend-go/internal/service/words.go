@@ -72,7 +72,7 @@ func (s *WordService) GetWordReviews(wordID int64) ([]map[string]interface{}, er
 
 	var result []map[string]interface{}
 	for _, review := range reviews {
-		session, err := models.GetStudySession(review.SessionID)
+		session, err := models.GetStudySession(review.StudySessionID)
 		if err != nil {
 			continue
 		}
@@ -83,11 +83,12 @@ func (s *WordService) GetWordReviews(wordID int64) ([]map[string]interface{}, er
 		}
 
 		result = append(result, map[string]interface{}{
-			"id":           review.ID,
-			"session_id":   review.SessionID,
-			"group_name":   group.Name,
-			"correct":      review.Correct,
-			"created_at":   review.CreatedAt,
+			"id":               review.ID,
+			"word_id":          review.WordID,
+			"study_session_id": review.StudySessionID,
+			"group_name":       group.Name,
+			"correct":          review.Correct,
+			"created_at":       review.CreatedAt,
 		})
 	}
 

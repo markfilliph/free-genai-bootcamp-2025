@@ -74,6 +74,35 @@ func GetRecentStudyActivities(groupID int64, limit int) ([]StudyActivity, error)
 	return activities, nil
 }
 
+// GetStudyActivities returns all study activities
+func GetStudyActivities() ([]StudyActivity, error) {
+	rows, err := DB.Query(`
+		SELECT id, study_session_id, group_id, created_at
+		FROM study_activities
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var activities []StudyActivity
+	for rows.Next() {
+		var activity StudyActivity
+		err := rows.Scan(&activity.ID, &activity.StudySessionID, &activity.GroupID, &activity.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		activities = append(activities, activity)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return activities, nil
+}
+
 // GetStudyActivityStats returns statistics for a study activity
 func GetStudyActivityStats(activityID int64) (map[string]int, error) {
 	var totalSessions, totalWords int

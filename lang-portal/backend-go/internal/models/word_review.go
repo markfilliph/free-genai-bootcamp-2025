@@ -14,14 +14,14 @@ type WordReview struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-// CreateWordReview creates a new word review in the database
-func CreateWordReview(wordID, sessionID int64, correct bool) (*WordReview, error) {
+// CreateWordReview creates a new word review
+func CreateWordReview(wordID, studySessionID int64, correct bool) (*WordReview, error) {
 	var review WordReview
 	err := DB.QueryRow(`
 		INSERT INTO word_review_items (word_id, study_session_id, correct, created_at)
 		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 		RETURNING id, word_id, study_session_id, correct, created_at
-	`, wordID, sessionID, correct).Scan(
+	`, wordID, studySessionID, correct).Scan(
 		&review.ID, &review.WordID, &review.StudySessionID, &review.Correct, &review.CreatedAt,
 	)
 
@@ -51,14 +51,14 @@ func GetWordReview(id int64) (*WordReview, error) {
 	return &review, nil
 }
 
-// GetWordReviewsBySession retrieves all word reviews for a study session
-func GetWordReviewsBySession(sessionID int64) ([]*WordReview, error) {
+// GetWordReviewsBySession returns all reviews for a specific study session
+func GetWordReviewsBySession(studySessionID int64) ([]*WordReview, error) {
 	rows, err := DB.Query(`
 		SELECT id, word_id, study_session_id, correct, created_at
 		FROM word_review_items
 		WHERE study_session_id = ?
 		ORDER BY created_at DESC
-	`, sessionID)
+	`, studySessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +74,36 @@ func GetWordReviewsBySession(sessionID int64) ([]*WordReview, error) {
 			return nil, err
 		}
 		reviews = append(reviews, &review)
+	}
+
+	return reviews, nil
+}
+
+// GetWordReviews returns all reviews for a specific word
+func GetWordReviews(wordID int64) ([]*WordReview, error) {
+	rows, err := DB.Query(`
+		SELECT id, word_id, study_session_id, correct, created_at
+		FROM word_review_items
+		WHERE word_id = ?
+		ORDER BY created_at DESC
+	`, wordID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var reviews []*WordReview
+	for rows.Next() {
+		var review WordReview
+		err := rows.Scan(&review.ID, &review.WordID, &review.StudySessionID, &review.Correct, &review.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		reviews = append(reviews, &review)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return reviews, nil
@@ -136,14 +166,13 @@ func GetStudyProgress() (map[string]int, error) {
 }
 
 // GetStudySessionWords returns all words reviewed in a study session
-func GetStudySessionWords(sessionID int64) ([]Word, error) {
+func GetStudySessionWords(studySessionID int64) ([]Word, error) {
 	rows, err := DB.Query(`
-		SELECT DISTINCT w.id, w.japanese, w.romaji, w.english, w.parts
+		SELECT DISTINCT w.*
 		FROM words w
-		INNER JOIN word_review_items wr ON w.id = wr.word_id
+		JOIN word_review_items wr ON w.id = wr.word_id
 		WHERE wr.study_session_id = ?
-		ORDER BY w.japanese
-	`, sessionID)
+	`, studySessionID)
 	if err != nil {
 		return nil, err
 	}

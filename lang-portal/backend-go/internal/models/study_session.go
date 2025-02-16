@@ -185,8 +185,8 @@ func (s *StudySession) UpdateStudyActivityID(activityID int64) error {
 	return nil
 }
 
-// LinkStudyActivityToSession links a study activity to a session
-func LinkStudyActivityToSession(activityID, sessionID int64) error {
+// LinkStudyActivityToSession links a study activity to a study session
+func LinkStudyActivityToSession(activityID, studySessionID int64) error {
 	tx, err := DB.Begin()
 	if err != nil {
 		return err
@@ -198,7 +198,7 @@ func LinkStudyActivityToSession(activityID, sessionID int64) error {
 		UPDATE study_activities
 		SET study_session_id = ?
 		WHERE id = ?
-	`, sessionID, activityID)
+	`, studySessionID, activityID)
 	if err != nil {
 		return err
 	}
@@ -208,7 +208,7 @@ func LinkStudyActivityToSession(activityID, sessionID int64) error {
 		UPDATE study_sessions
 		SET study_activity_id = ?
 		WHERE id = ?
-	`, activityID, sessionID)
+	`, activityID, studySessionID)
 	if err != nil {
 		return err
 	}

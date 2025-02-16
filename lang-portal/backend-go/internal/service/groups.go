@@ -91,7 +91,8 @@ func (s *GroupService) GetGroupWords(groupID int64) ([]map[string]interface{}, e
 
 // GetGroupStudySessions returns study sessions for a group with detailed statistics
 func (s *GroupService) GetGroupStudySessions(groupID int64) ([]map[string]interface{}, error) {
-	sessions, err := models.GetStudySessions()
+	// Get all sessions with a large limit since we'll filter by group
+	sessions, err := models.GetStudySessions(0, 1000)
 	if err != nil {
 		return nil, err
 	}
@@ -108,10 +109,10 @@ func (s *GroupService) GetGroupStudySessions(groupID int64) ([]map[string]interf
 		}
 
 		var activityName string
-		if session.StudyActivityID != 0 {
-			activity, err := models.GetStudyActivity(session.StudyActivityID)
-			if err == nil {
-				activityName = "Vocabulary Quiz" // TODO: Add activity types
+		if session.StudyActivityID != nil && *session.StudyActivityID != 0 {
+			activity, err := models.GetStudyActivity(*session.StudyActivityID)
+			if err == nil && activity != nil {
+				activityName = "Vocabulary Quiz" // Default activity type for now
 			}
 		}
 

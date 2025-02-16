@@ -58,7 +58,8 @@ func (s *DashboardService) GetStudyProgress() (map[string]interface{}, error) {
 
 // GetQuickStats returns quick overview statistics
 func (s *DashboardService) GetQuickStats() (map[string]interface{}, error) {
-	sessions, err := models.GetStudySessions()
+	// Get all sessions with a large limit
+	sessions, err := models.GetStudySessions(0, 1000)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +97,7 @@ func (s *DashboardService) GetQuickStats() (map[string]interface{}, error) {
 }
 
 // calculateStudyStreak calculates the current study streak in days
-func calculateStudyStreak(sessions []models.StudySession) int {
+func calculateStudyStreak(sessions []*models.StudySession) int {
 	if len(sessions) == 0 {
 		return 0
 	}

@@ -29,11 +29,11 @@ func (s *StudyService) GetStudyActivities() ([]map[string]interface{}, error) {
 
 		result = append(result, map[string]interface{}{
 			"id":                activity.ID,
-			"name":             "Vocabulary Quiz", // TODO: Add activity types
-			"total_sessions":   stats["total_sessions"],
-			"total_words":      stats["total_words"],
-			"success_rate":     stats["success_rate"],
-			"created_at":       activity.CreatedAt,
+			"name":              "Vocabulary Quiz", // TODO: Add activity types
+			"total_sessions":    stats["total_sessions"],
+			"total_words":       stats["total_words"],
+			"success_rate":      stats["success_rate"],
+			"created_at":        activity.CreatedAt,
 		})
 	}
 
@@ -63,26 +63,28 @@ func (s *StudyService) GetStudyActivity(id int64) (map[string]interface{}, error
 	}
 
 	return map[string]interface{}{
-		"id":              activity.ID,
-		"name":           "Vocabulary Quiz", // TODO: Add activity types
-		"total_sessions": stats["total_sessions"],
-		"total_words":    stats["total_words"],
-		"success_rate":   stats["success_rate"],
-		"created_at":     activity.CreatedAt,
-		"session":        session,
+		"id":               activity.ID,
+		"name":             "Vocabulary Quiz", // TODO: Add activity types
+		"total_sessions":   stats["total_sessions"],
+		"total_words":      stats["total_words"],
+		"success_rate":     stats["success_rate"],
+		"created_at":       activity.CreatedAt,
+		"session":          session,
 	}, nil
 }
 
 // GetStudyActivitySessions returns study sessions for an activity with detailed statistics
 func (s *StudyService) GetStudyActivitySessions(activityID int64) ([]map[string]interface{}, error) {
-	sessions, err := models.GetStudySessions()
+	// Get all sessions with a large limit since we'll filter by activity ID
+	sessions, err := models.GetStudySessions(0, 1000)
 	if err != nil {
 		return nil, err
 	}
 
 	var result []map[string]interface{}
 	for _, session := range sessions {
-		if session.StudyActivityID != activityID {
+		// Skip if activity ID doesn't match or is nil
+		if session.StudyActivityID == nil || *session.StudyActivityID != activityID {
 			continue
 		}
 
@@ -97,11 +99,11 @@ func (s *StudyService) GetStudyActivitySessions(activityID int64) ([]map[string]
 		}
 
 		result = append(result, map[string]interface{}{
-			"id":             session.ID,
-			"group_name":     group.Name,
-			"created_at":     session.CreatedAt,
-			"total_words":    stats["total"],
-			"correct_words":  stats["correct"],
+			"id":               session.ID,
+			"group_name":       group.Name,
+			"created_at":       session.CreatedAt,
+			"total_words":      stats["total"],
+			"correct_words":    stats["correct"],
 		})
 	}
 
@@ -110,9 +112,18 @@ func (s *StudyService) GetStudyActivitySessions(activityID int64) ([]map[string]
 
 // CreateStudySession creates a new study session and returns its details
 func (s *StudyService) CreateStudySession(groupID, activityID int64) (map[string]interface{}, error) {
-	session, err := models.CreateStudySession(groupID, activityID)
+	// Create the study session first
+	session, err := models.CreateStudySession(groupID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Link the session to the activity if provided
+	if activityID != 0 {
+		err = models.LinkStudyActivityToSession(activityID, session.ID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	group, err := models.GetGroup(session.GroupID)
@@ -142,11 +153,11 @@ func (s *StudyService) ReviewWord(sessionID, wordID int64, correct bool) (map[st
 	}
 
 	return map[string]interface{}{
-		"id":           review.ID,
-		"word_id":      review.WordID,
-		"word":         word.Japanese,
-		"session_id":   review.SessionID,
-		"correct":      review.Correct,
-		"created_at":   review.CreatedAt,
+		"id":               review.ID,
+		"word_id":          review.WordID,
+		"word":             word.Japanese,
+		"study_session_id": review.StudySessionID,
+		"correct":          review.Correct,
+		"created_at":       review.CreatedAt,
 	}, nil
 }
