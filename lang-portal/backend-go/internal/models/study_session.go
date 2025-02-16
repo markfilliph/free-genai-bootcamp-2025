@@ -2,18 +2,30 @@ package models
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 )
 
-// StudySession represents a study session in the database
+// StudySession represents a single study session
 type StudySession struct {
-	ID              int64      `json:"id"`
-	GroupID         int64      `json:"group_id"`
-	StudyActivityID *int64     `json:"study_activity_id,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
+	ID              int64     `json:"id"`
+	GroupID         int64     `json:"group_id"`
+	StudyActivityID int64     `json:"study_activity_id"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
-// CreateStudySession creates a new study session in the database
+// StudySessionWithStats includes study session data with statistics
+type StudySessionWithStats struct {
+	StudySession
+	TotalWords      int     `json:"total_words"`
+	CorrectWords    int     `json:"correct_words"`
+	IncorrectWords  int     `json:"incorrect_words"`
+	AccuracyRate    float64 `json:"accuracy_rate"`
+	CompletionRate  float64 `json:"completion_rate"`
+	ReviewedWords   []int64 `json:"reviewed_words,omitempty"`
+}
+
+// CreateStudySession creates a new study session
 func CreateStudySession(groupID int64) (*StudySession, error) {
 	var session StudySession
 	err := DB.QueryRow(`
@@ -47,7 +59,7 @@ func GetStudySession(id int64) (*StudySession, error) {
 	}
 
 	if studyActivityID.Valid {
-		session.StudyActivityID = &studyActivityID.Int64
+		session.StudyActivityID = studyActivityID.Int64
 	}
 
 	return &session, nil
@@ -75,7 +87,7 @@ func GetStudySessions(offset, limit int) ([]*StudySession, error) {
 			return nil, err
 		}
 		if studyActivityID.Valid {
-			session.StudyActivityID = &studyActivityID.Int64
+			session.StudyActivityID = studyActivityID.Int64
 		}
 		sessions = append(sessions, &session)
 	}
@@ -106,7 +118,7 @@ func GetStudySessionsByGroup(groupID int64, offset, limit int) ([]*StudySession,
 			return nil, err
 		}
 		if studyActivityID.Valid {
-			session.StudyActivityID = &studyActivityID.Int64
+			session.StudyActivityID = studyActivityID.Int64
 		}
 		sessions = append(sessions, &session)
 	}
@@ -136,7 +148,7 @@ func GetStudySessionsByGroupID(groupID int64) ([]*StudySession, error) {
 			return nil, err
 		}
 		if studyActivityID.Valid {
-			session.StudyActivityID = &studyActivityID.Int64
+			session.StudyActivityID = studyActivityID.Int64
 		}
 		sessions = append(sessions, &session)
 	}
@@ -165,7 +177,7 @@ func GetLastStudySession() (*StudySession, error) {
 		return nil, err
 	}
 	if studyActivityID.Valid {
-		s.StudyActivityID = &studyActivityID.Int64
+		s.StudyActivityID = studyActivityID.Int64
 	}
 	return &s, nil
 }
@@ -181,7 +193,7 @@ func (s *StudySession) UpdateStudyActivityID(activityID int64) error {
 		return err
 	}
 
-	s.StudyActivityID = &activityID
+	s.StudyActivityID = activityID
 	return nil
 }
 
@@ -330,7 +342,7 @@ func GetStudySessionsByActivityID(activityID int64) ([]*StudySession, error) {
 			return nil, err
 		}
 		if studyActivityID.Valid {
-			session.StudyActivityID = &studyActivityID.Int64
+			session.StudyActivityID = studyActivityID.Int64
 		}
 		sessions = append(sessions, &session)
 	}
@@ -359,7 +371,7 @@ func GetStudySessionsByDate() ([]*StudySession, error) {
 			return nil, err
 		}
 		if studyActivityID.Valid {
-			session.StudyActivityID = &studyActivityID.Int64
+			session.StudyActivityID = studyActivityID.Int64
 		}
 		sessions = append(sessions, &session)
 	}

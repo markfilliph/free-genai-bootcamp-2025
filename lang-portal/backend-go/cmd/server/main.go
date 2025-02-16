@@ -1,14 +1,20 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
-	"lang-portal/internal/models"
-	"lang-portal/internal/service"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	"lang-portal/internal/handlers"
+	"lang-portal/internal/logger"
+	"lang-portal/internal/middleware"
+	"lang-portal/internal/models"
+	"lang-portal/internal/service"
 )
 
 var (
@@ -19,12 +25,32 @@ var (
 )
 
 func main() {
-	// Load .env file if it exists
-	_ = godotenv.Load()
+	// Load environment-specific configuration
+	if err := loadEnvConfig(); err != nil {
+		log.Fatal("Failed to load environment configuration:", err)
+	}
+
+	// Initialize logger
+	logConfig := logger.Config{
+		// Basic settings
+		LogLevel:      getEnv("LOG_LEVEL", "info"),
+		LogFile:       getEnv("LOG_FILE", filepath.Join("logs", fmt.Sprintf("app.%s.log", getEnv("APP_ENV", "development")))),
+		EnableConsole: getEnvBool("LOG_CONSOLE", true),
+
+		// Rotation settings
+		MaxSize:    getEnvInt("LOG_MAX_SIZE", 10),
+		MaxBackups: getEnvInt("LOG_MAX_BACKUPS", 30),
+		MaxAge:     getEnvInt("LOG_MAX_AGE", 90),
+		Compress:   getEnvBool("LOG_COMPRESS", true),
+	}
+
+	if err := logger.Initialize(logConfig); err != nil {
+		log.Fatal("Failed to initialize logger:", err)
+	}
 
 	// Initialize database with MySQL
 	if err := models.InitDB(""); err != nil {
-		log.Fatal("Failed to initialize database:", err)
+		logger.Fatal("Failed to initialize database", logger.Fields{"error": err.Error()})
 	}
 	defer models.CloseDB()
 
@@ -34,11 +60,22 @@ func main() {
 	studyService = service.NewStudyService()
 	wordService = service.NewWordService()
 
+	// Initialize handlers
+	dashboardHandler := handlers.NewDashboardHandler(dashboardService, studyService)
+	groupHandler := handlers.NewGroupHandler(groupService)
+	studySessionHandler := handlers.NewStudySessionHandler(studyService)
+	wordHandler := handlers.NewWordHandler(wordService)
+
 	// Initialize Gin router
-	r := gin.Default()
+	r := gin.New() // Use gin.New() instead of gin.Default() to avoid default logger
+
+	// Add global middleware
+	r.Use(gin.Recovery())
+	r.Use(middleware.RequestLogging())
+	r.Use(middleware.ValidationMiddleware())
 
 	// Initialize routes
-	initializeRoutes(r)
+	initializeRoutes(r, dashboardHandler, groupHandler, studySessionHandler, wordHandler)
 
 	// Get server port from environment variable, default to 8080
 	port := ":8080"
@@ -47,349 +84,104 @@ func main() {
 	}
 
 	// Start server
+	logger.Info("Starting server", logger.Fields{"port": port})
 	if err := r.Run(port); err != nil {
-		log.Fatal("Failed to start server:", err)
+		logger.Fatal("Failed to start server", logger.Fields{"error": err.Error()})
 	}
 }
 
-func initializeRoutes(r *gin.Engine) {
+func initializeRoutes(
+	r *gin.Engine,
+	dashboardHandler *handlers.DashboardHandler,
+	groupHandler *handlers.GroupHandler,
+	studySessionHandler *handlers.StudySessionHandler,
+	wordHandler *handlers.WordHandler,
+) {
 	// API group
 	api := r.Group("/api")
 	
 	// Dashboard routes
-	api.GET("/dashboard/last-study-session", getLastStudySession)
-	api.GET("/dashboard/study-progress", getStudyProgress)
-	api.GET("/dashboard/quick-stats", getQuickStats)
+	api.GET("/dashboard/last-study-session", dashboardHandler.GetLastStudySession)
+	api.GET("/dashboard/study-progress", dashboardHandler.GetStudyProgress)
+	api.GET("/dashboard/quick-stats", dashboardHandler.GetQuickStats)
 
 	// Study activities routes
-	api.GET("/study-activities/:id", getStudyActivity)
-	api.GET("/study-activities/:id/sessions", getStudyActivitySessions)
-	api.POST("/study-activities", createStudyActivity)
+	api.GET("/study-activities/:id", studySessionHandler.GetStudyActivity)
+	api.GET("/study-activities/:id/sessions", studySessionHandler.GetStudyActivitySessions)
+	api.POST("/study-activities", studySessionHandler.CreateStudyActivity)
 
 	// Words routes
-	api.GET("/words", getWords)
-	api.GET("/words/:id", getWord)
+	api.GET("/words", wordHandler.GetWords)
+	api.GET("/words/:id", wordHandler.GetWord)
 
 	// Groups routes
-	api.GET("/groups", getGroups)
-	api.POST("/groups", createGroup)
-	api.GET("/groups/:id", getGroup)
-	api.GET("/groups/:id/words", getGroupWords)
-	api.GET("/groups/:id/study-sessions", getGroupStudySessions)
+	api.GET("/groups", groupHandler.GetGroups)
+	api.POST("/groups", groupHandler.CreateGroup)
+	api.GET("/groups/:id", groupHandler.GetGroup)
+	api.GET("/groups/:id/words", groupHandler.GetGroupWords)
+	api.GET("/groups/:id/study-sessions", groupHandler.GetGroupStudySessions)
 
 	// Study sessions routes
-	api.GET("/study-sessions", getStudySessions)
-	api.GET("/study-sessions/:id", getStudySession)
-	api.GET("/study-sessions/:id/words", getStudySessionWords)
-	api.POST("/study-sessions/:id/words/:word_id/review", reviewWordInSession)
+	api.GET("/study-sessions", studySessionHandler.GetStudySessions)
+	api.GET("/study-sessions/:id", studySessionHandler.GetStudySession)
+	api.GET("/study-sessions/:id/words", studySessionHandler.GetStudySessionWords)
+	api.POST("/study-sessions/:id/words/:word_id/review", studySessionHandler.ReviewWordInSession)
 
 	// Reset routes
-	api.POST("/reset/history", resetHistory)
-	api.POST("/reset/full", fullReset)
+	api.POST("/reset/history", dashboardHandler.ResetHistory)
+	api.POST("/reset/full", dashboardHandler.FullReset)
 }
 
-// Dashboard handlers
-func getLastStudySession(c *gin.Context) {
-	session, err := dashboardService.GetLastStudySession()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+// loadEnvConfig loads the appropriate .env file based on APP_ENV
+func loadEnvConfig() error {
+	// Default to development if APP_ENV is not set
+	env := getEnv("APP_ENV", "development")
+
+	// Load base .env file first (if exists)
+	_ = godotenv.Load()
+
+	// Load environment-specific .env file
+	envFile := fmt.Sprintf(".env.%s", env)
+	if err := godotenv.Load(envFile); err != nil {
+		return fmt.Errorf("error loading %s: %v", envFile, err)
 	}
-	c.JSON(http.StatusOK, session)
+
+	// Set GIN_MODE based on environment
+	if env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	} else {
+		gin.SetMode(gin.DebugMode)
+	}
+
+	return nil
 }
 
-func getStudyProgress(c *gin.Context) {
-	progress, err := dashboardService.GetStudyProgress()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+// getEnv gets an environment variable or returns a default value
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
 	}
-	c.JSON(http.StatusOK, progress)
+	return defaultValue
 }
 
-func getQuickStats(c *gin.Context) {
-	stats, err := dashboardService.GetQuickStats()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, stats)
-}
-
-// Study activity handlers
-func getStudyActivity(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid activity ID"})
-		return
-	}
-
-	activity, err := studyService.GetStudyActivity(id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, activity)
-}
-
-func getStudyActivitySessions(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid activity ID"})
-		return
-	}
-
-	sessions, err := studyService.GetStudyActivitySessions(id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, sessions)
-}
-
-func createStudyActivity(c *gin.Context) {
-	var request struct {
-		GroupID int64 `json:"group_id" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request parameters"})
-		return
-	}
-
-	session, err := studyService.CreateStudySession(request.GroupID, 0)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusCreated, session)
-}
-
-// Word handlers
-func getWords(c *gin.Context) {
-	words, err := wordService.GetWords()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, words)
-}
-
-func getWord(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid word ID"})
-		return
-	}
-
-	word, err := wordService.GetWord(id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, word)
-}
-
-// Group handlers
-func getGroups(c *gin.Context) {
-	offset := 0
-	limit := 10 // Default limit
-
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if val, err := strconv.Atoi(offsetStr); err == nil {
-			offset = val
+// getEnvInt gets an environment variable as int or returns a default value
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
 		}
+		log.Printf("Warning: Invalid integer value for %s, using default: %d", key, defaultValue)
 	}
+	return defaultValue
+}
 
-	if limitStr := c.Query("limit"); limitStr != "" {
-		if val, err := strconv.Atoi(limitStr); err == nil {
-			limit = val
+// getEnvBool gets an environment variable as bool or returns a default value
+func getEnvBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolValue, err := strconv.ParseBool(value); err == nil {
+			return boolValue
 		}
+		log.Printf("Warning: Invalid boolean value for %s, using default: %v", key, defaultValue)
 	}
-
-	groups, err := groupService.GetGroups(offset, limit)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, groups)
-}
-
-type CreateGroupRequest struct {
-	Name string `json:"name" binding:"required"`
-}
-
-func createGroup(c *gin.Context) {
-	var req CreateGroupRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	group, err := groupService.CreateGroup(req.Name)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusCreated, group)
-}
-
-func getGroup(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid group ID"})
-		return
-	}
-
-	group, err := groupService.GetGroup(id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, group)
-}
-
-func getGroupWords(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid group ID"})
-		return
-	}
-
-	words, err := groupService.GetGroupWords(id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, words)
-}
-
-func getGroupStudySessions(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid group ID"})
-		return
-	}
-
-	sessions, err := groupService.GetGroupStudySessions(id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, sessions)
-}
-
-// Study session handlers
-func getStudySessions(c *gin.Context) {
-	activities, err := studyService.GetStudyActivities()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, activities)
-}
-
-func getStudySession(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session ID"})
-		return
-	}
-
-	activity, err := studyService.GetStudyActivity(id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, activity)
-}
-
-func getStudySessionWords(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session ID"})
-		return
-	}
-
-	words, err := wordService.GetWordReviews(id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, words)
-}
-
-func reviewWordInSession(c *gin.Context) {
-	sessionID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session ID"})
-		return
-	}
-
-	wordID, err := strconv.ParseInt(c.Param("word_id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid word ID"})
-		return
-	}
-
-	var request struct {
-		Correct bool `json:"correct" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request parameters"})
-		return
-	}
-
-	review, err := studyService.ReviewWord(sessionID, wordID, request.Correct)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, review)
-}
-
-// Reset handlers
-func resetHistory(c *gin.Context) {
-	// Reset all study history but keep words and groups
-	db, err := models.GetDB()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	_, err = db.Exec(`
-		DELETE FROM word_reviews;
-		DELETE FROM study_sessions;
-		DELETE FROM study_activities;
-	`)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "Study history has been reset"})
-}
-
-func fullReset(c *gin.Context) {
-	// Reset everything in the database
-	db, err := models.GetDB()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	_, err = db.Exec(`
-		DELETE FROM word_reviews;
-		DELETE FROM study_sessions;
-		DELETE FROM study_activities;
-		DELETE FROM words;
-		DELETE FROM groups;
-	`)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "Database has been fully reset"})
+	return defaultValue
 }

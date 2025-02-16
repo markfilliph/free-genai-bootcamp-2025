@@ -12,6 +12,7 @@ type Group struct {
 	ID        int64     `json:"id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // GroupStats represents statistics for a word group
@@ -28,29 +29,35 @@ type GroupStats struct {
 	StudyTimeMinute int `json:"study_time_minute"`
 }
 
-// GetGroups retrieves a paginated list of groups
-func GetGroups(page int) ([]Group, int, error) {
+// GetGroups retrieves a paginated list of groups with optional filtering
+func GetGroups(page, pageSize int, search string) ([]Group, int, error) {
+	offset := (page - 1) * pageSize
+
+	// Base query with pagination
+	query := `
+		SELECT SQL_CALC_FOUND_ROWS 
+			id, name, created_at, updated_at
+		FROM word_groups
+		WHERE 1=1
+	`
+	args := []interface{}{}
+
+	// Add search condition if provided
+	if search != "" {
+		query += " AND name LIKE ?"
+		args = append(args, "%"+search+"%")
+	}
+
+	// Add ordering and pagination
+	query += `
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`
+	args = append(args, pageSize, offset)
+
+	// Execute the main query
 	db := GetDB()
-	
-	// Get total count
-	var total int
-	err := db.QueryRow("SELECT COUNT(*) FROM word_groups").Scan(&total)
-	if err != nil {
-		return nil, 0, fmt.Errorf("error counting groups: %v", err)
-	}
-
-	// Calculate offset
-	offset := (page - 1) * 100
-	if offset < 0 {
-		offset = 0
-	}
-
-	// Get paginated groups
-	rows, err := db.Query(`
-		SELECT id, name, created_at 
-		FROM word_groups 
-		ORDER BY name 
-		LIMIT 100 OFFSET ?`, offset)
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("error querying groups: %v", err)
 	}
@@ -59,10 +66,17 @@ func GetGroups(page int) ([]Group, int, error) {
 	var groups []Group
 	for rows.Next() {
 		var g Group
-		if err := rows.Scan(&g.ID, &g.Name, &g.CreatedAt); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.CreatedAt, &g.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("error scanning group: %v", err)
 		}
 		groups = append(groups, g)
+	}
+
+	// Get total count
+	var total int
+	err = db.QueryRow("SELECT FOUND_ROWS()").Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("error getting total count: %v", err)
 	}
 
 	return groups, total, nil
@@ -74,9 +88,9 @@ func GetGroup(groupID int64) (*Group, error) {
 
 	var g Group
 	err := db.QueryRow(`
-		SELECT id, name, created_at 
+		SELECT id, name, created_at, updated_at 
 		FROM word_groups 
-		WHERE id = ?`, groupID).Scan(&g.ID, &g.Name, &g.CreatedAt)
+		WHERE id = ?`, groupID).Scan(&g.ID, &g.Name, &g.CreatedAt, &g.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -92,8 +106,8 @@ func CreateGroup(g *Group) error {
 	db := GetDB()
 
 	result, err := db.Exec(`
-		INSERT INTO word_groups (name, created_at)
-		VALUES (?, CURRENT_TIMESTAMP)`,
+		INSERT INTO word_groups (name, created_at, updated_at)
+		VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
 		g.Name)
 	if err != nil {
 		return fmt.Errorf("error inserting group: %v", err)
@@ -114,7 +128,7 @@ func UpdateGroup(g *Group) error {
 
 	result, err := db.Exec(`
 		UPDATE word_groups 
-		SET name = ?
+		SET name = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`,
 		g.Name, g.ID)
 	if err != nil {
@@ -172,30 +186,34 @@ func DeleteGroup(groupID int64) error {
 	return nil
 }
 
-// AddWordsToGroup adds words to a group
+// AddWordsToGroup adds multiple words to a group in a single transaction
 func AddWordsToGroup(groupID int64, wordIDs []int64) error {
-	if len(wordIDs) == 0 {
-		return nil
-	}
-
+	// Start transaction
 	db := GetDB()
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("error starting transaction: %v", err)
 	}
+	defer tx.Rollback()
 
+	// Prepare the insert statement
+	stmt, err := tx.Prepare(`
+		INSERT IGNORE INTO words_groups (word_id, group_id)
+		VALUES (?, ?)
+	`)
+	if err != nil {
+		return fmt.Errorf("error preparing statement: %v", err)
+	}
+	defer stmt.Close()
+
+	// Execute for each word ID
 	for _, wordID := range wordIDs {
-		_, err := tx.Exec(`
-			INSERT INTO words_groups (word_id, group_id)
-			VALUES (?, ?)
-			ON CONFLICT (word_id, group_id) DO NOTHING`,
-			wordID, groupID)
-		if err != nil {
-			tx.Rollback()
+		if _, err := stmt.Exec(groupID, wordID); err != nil {
 			return fmt.Errorf("error adding word %d to group: %v", wordID, err)
 		}
 	}
 
+	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("error committing transaction: %v", err)
 	}
@@ -203,29 +221,34 @@ func AddWordsToGroup(groupID int64, wordIDs []int64) error {
 	return nil
 }
 
-// RemoveWordsFromGroup removes words from a group
+// RemoveWordsFromGroup removes multiple words from a group in a single transaction
 func RemoveWordsFromGroup(groupID int64, wordIDs []int64) error {
-	if len(wordIDs) == 0 {
-		return nil
-	}
-
+	// Start transaction
 	db := GetDB()
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("error starting transaction: %v", err)
 	}
+	defer tx.Rollback()
 
+	// Prepare the delete statement
+	stmt, err := tx.Prepare(`
+		DELETE FROM words_groups 
+		WHERE group_id = ? AND word_id = ?
+	`)
+	if err != nil {
+		return fmt.Errorf("error preparing statement: %v", err)
+	}
+	defer stmt.Close()
+
+	// Execute for each word ID
 	for _, wordID := range wordIDs {
-		_, err := tx.Exec(`
-			DELETE FROM words_groups 
-			WHERE word_id = ? AND group_id = ?`,
-			wordID, groupID)
-		if err != nil {
-			tx.Rollback()
+		if _, err := stmt.Exec(groupID, wordID); err != nil {
 			return fmt.Errorf("error removing word %d from group: %v", wordID, err)
 		}
 	}
 
+	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("error committing transaction: %v", err)
 	}
@@ -233,38 +256,59 @@ func RemoveWordsFromGroup(groupID int64, wordIDs []int64) error {
 	return nil
 }
 
-// GetGroupWords retrieves all words in a group
-func GetGroupWords(groupID int64) ([]Word, error) {
-	if groupID <= 0 {
-		return nil, errors.New("invalid group ID")
-	}
+// GetGroupWords retrieves a paginated list of words for a specific group
+func GetGroupWords(groupID int64, page, pageSize int) ([]Word, int, error) {
+	offset := (page - 1) * pageSize
 
-	rows, err := DB.Query(`
-		SELECT w.id, w.japanese, w.romaji, w.english, w.parts
+	// Base query with pagination and joins
+	query := `
+		SELECT SQL_CALC_FOUND_ROWS 
+			w.id, w.japanese, w.romaji, w.english, w.parts,
+			COALESCE(
+				(SELECT COUNT(*) FROM word_reviews wr 
+				WHERE wr.word_id = w.id AND wr.correct = true), 
+				0
+			) as correct_count,
+			COALESCE(
+				(SELECT COUNT(*) FROM word_reviews wr 
+				WHERE wr.word_id = w.id AND wr.correct = false), 
+				0
+			) as incorrect_count
 		FROM words w
-		JOIN words_groups wg ON w.id = wg.word_id
+		INNER JOIN words_groups wg ON w.id = wg.word_id
 		WHERE wg.group_id = ?
-		ORDER BY w.japanese
-	`, groupID)
+		ORDER BY w.japanese DESC
+		LIMIT ? OFFSET ?
+	`
+
+	// Execute the main query
+	db := GetDB()
+	rows, err := db.Query(query, groupID, pageSize, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, fmt.Errorf("error querying group words: %v", err)
 	}
 	defer rows.Close()
 
 	var words []Word
 	for rows.Next() {
 		var w Word
-		if err := rows.Scan(&w.ID, &w.Japanese, &w.Romaji, &w.English, &w.Parts); err != nil {
-			return nil, err
+		if err := rows.Scan(
+			&w.ID, &w.Japanese, &w.Romaji, &w.English, &w.Parts,
+			&w.CorrectCount, &w.IncorrectCount,
+		); err != nil {
+			return nil, 0, fmt.Errorf("error scanning word: %v", err)
 		}
 		words = append(words, w)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
+	// Get total count
+	var total int
+	err = db.QueryRow("SELECT FOUND_ROWS()").Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("error getting total count: %v", err)
 	}
 
-	return words, nil
+	return words, total, nil
 }
 
 // GetGroupStats retrieves statistics for a group
@@ -276,7 +320,7 @@ func GetGroupStats(groupID int64) (*GroupStats, error) {
 	var stats GroupStats
 
 	// Get total words and studied words
-	err := DB.QueryRow(`
+	err := GetDB().QueryRow(`
 		SELECT 
 			COUNT(DISTINCT wg.word_id) as total_words,
 			COUNT(DISTINCT CASE WHEN wri.id IS NOT NULL THEN wg.word_id END) as studied_words,
@@ -319,7 +363,7 @@ func GetGroupStats(groupID int64) (*GroupStats, error) {
 
 // calculateGroupStudyStreak calculates the current study streak for a group
 func calculateGroupStudyStreak(groupID int64) (int, error) {
-	rows, err := DB.Query(`
+	rows, err := GetDB().Query(`
 		SELECT DATE(created_at) as study_date
 		FROM study_sessions
 		WHERE group_id = ?
