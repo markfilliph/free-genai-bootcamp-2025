@@ -138,22 +138,3 @@ func DeleteWord(db *sql.DB, id int) error {
 
 	return tx.Commit()
 }
-
-// AddWordToGroup adds a word to a group
-func AddWordToGroup(db *sql.DB, wordID, groupID int) error {
-	_, err := db.Exec(`
-		INSERT INTO words_groups (word_id, group_id)
-		VALUES (?, ?)
-		ON CONFLICT (word_id, group_id) DO NOTHING`,
-		wordID, groupID)
-	return err
-}
-
-// RemoveWordFromGroup removes a word from a group
-func RemoveWordFromGroup(db *sql.DB, wordID, groupID int) error {
-	_, err := db.Exec(`
-		DELETE FROM words_groups
-		WHERE word_id = ? AND group_id = ?`,
-		wordID, groupID)
-	return err
-}

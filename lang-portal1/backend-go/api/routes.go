@@ -36,18 +36,23 @@ func SetupRoutes(r *gin.Engine, db *sql.DB) {
 	// Word-group relationship routes
 	wordGroupRoutes := api.Group("/word-groups")
 	{
-		wordGroupRoutes.POST("/:wordId/:groupId", handlers.AddWordToGroup(db))
-		wordGroupRoutes.DELETE("/:wordId/:groupId", handlers.RemoveWordFromGroup(db))
+		wordGroupRoutes.POST("/:wordId/:groupId", handlers.AddWordToGroupFromWord(db))
+		wordGroupRoutes.DELETE("/:wordId/:groupId", handlers.RemoveWordFromGroupHandler(db))
 	}
 
 	// Group routes
-	api.GET("/groups", handlers.GetGroups(db))
-	api.GET("/groups/:id", handlers.GetGroup(db))
-	api.GET("/groups/:id/words", handlers.GetGroupWords(db))
-	api.POST("/groups", handlers.CreateGroup(db))
-	api.PUT("/groups/:id", handlers.UpdateGroup(db))
-	api.DELETE("/groups/:id", handlers.DeleteGroup(db))
-	api.GET("/groups/:id/study_sessions", handlers.GetGroupStudySessions(db))
+	groupRoutes := api.Group("/groups")
+	{
+		groupRoutes.GET("", handlers.GetGroups(db))
+		groupRoutes.POST("", handlers.CreateGroup(db))
+		groupRoutes.GET("/:id", handlers.GetGroup(db))
+		groupRoutes.PUT("/:id", handlers.UpdateGroup(db))
+		groupRoutes.DELETE("/:id", handlers.DeleteGroup(db))
+		groupRoutes.GET("/:id/words", handlers.GetGroupWords(db))
+		groupRoutes.POST("/:id/words/:wordId", handlers.AddWordToGroup(db))
+		groupRoutes.DELETE("/:id/words/:wordId", handlers.RemoveWordFromGroup(db))
+		groupRoutes.GET("/:id/study_sessions", handlers.GetGroupStudySessions(db))
+	}
 
 	// Study session routes
 	api.GET("/study_sessions", handlers.GetStudySessions(db))

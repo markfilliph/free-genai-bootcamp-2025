@@ -70,7 +70,8 @@ func GetGroupWords(db *sql.DB) gin.HandlerFunc {
 }
 
 type CreateGroupRequest struct {
-	Name string `json:"name" binding:"required"`
+	Name        string `json:"name" binding:"required"`
+	Description string `json:"description"`
 }
 
 func CreateGroup(db *sql.DB) gin.HandlerFunc {
@@ -82,7 +83,8 @@ func CreateGroup(db *sql.DB) gin.HandlerFunc {
 		}
 
 		group := &models.Group{
-			Name: req.Name,
+			Name:        req.Name,
+			Description: req.Description,
 		}
 
 		if err := models.CreateGroup(db, group); err != nil {
@@ -137,7 +139,67 @@ func DeleteGroup(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		c.Status(http.StatusNoContent)
+		c.Status(http.StatusOK)
+	}
+}
+
+func AddWordToGroup(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		groupIDStr := c.Param("id")
+		wordIDStr := c.Param("wordId")
+
+		groupID, err := strconv.Atoi(groupIDStr)
+		if err != nil {
+			respondWithError(c, http.StatusBadRequest, "Invalid group ID")
+			return
+		}
+
+		wordID, err := strconv.Atoi(wordIDStr)
+		if err != nil {
+			respondWithError(c, http.StatusBadRequest, "Invalid word ID")
+			return
+		}
+
+		if err := models.AddWordToGroup(db, groupID, wordID); err != nil {
+			if err == sql.ErrNoRows {
+				respondWithError(c, http.StatusNotFound, "Group or word not found")
+				return
+			}
+			respondWithError(c, http.StatusInternalServerError, "Failed to add word to group")
+			return
+		}
+
+		c.Status(http.StatusOK)
+	}
+}
+
+func RemoveWordFromGroup(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		groupIDStr := c.Param("id")
+		wordIDStr := c.Param("wordId")
+
+		groupID, err := strconv.Atoi(groupIDStr)
+		if err != nil {
+			respondWithError(c, http.StatusBadRequest, "Invalid group ID")
+			return
+		}
+
+		wordID, err := strconv.Atoi(wordIDStr)
+		if err != nil {
+			respondWithError(c, http.StatusBadRequest, "Invalid word ID")
+			return
+		}
+
+		if err := models.RemoveWordFromGroup(db, groupID, wordID); err != nil {
+			if err == sql.ErrNoRows {
+				respondWithError(c, http.StatusNotFound, "Group or word not found")
+				return
+			}
+			respondWithError(c, http.StatusInternalServerError, "Failed to remove word from group")
+			return
+		}
+
+		c.Status(http.StatusOK)
 	}
 }
 

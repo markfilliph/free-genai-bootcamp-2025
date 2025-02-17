@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"log"
 	"time"
 )
 
@@ -35,15 +36,13 @@ type QuickStats struct {
 // GetLastStudySession retrieves the most recent study session with stats
 func GetLastStudySession(db *sql.DB) (*LastStudySession, error) {
 	var session LastStudySession
-	err := db.QueryRow(`
+	query := `
 		SELECT 
 			ss.id,
 			ss.group_id,
 			g.name as group_name,
 			ss.study_activity_id,
-			sa.name as activity_name,
 			ss.created_at,
-			ss.completed_at,
 			COUNT(CASE WHEN wri.correct THEN 1 END) as correct_count,
 			COUNT(wri.word_id) as total_count
 		FROM study_sessions ss
@@ -53,14 +52,14 @@ func GetLastStudySession(db *sql.DB) (*LastStudySession, error) {
 		GROUP BY ss.id
 		ORDER BY ss.created_at DESC
 		LIMIT 1
-	`).Scan(
+	`
+	log.Println("Executing query:", query) // Log the SQL query
+	err := db.QueryRow(query).Scan(
 		&session.ID,
 		&session.GroupID,
 		&session.GroupName,
 		&session.StudyActivityID,
-		&session.ActivityName,
 		&session.CreatedAt,
-		&session.CompletedAt,
 		&session.CorrectCount,
 		&session.TotalCount,
 	)
@@ -68,6 +67,7 @@ func GetLastStudySession(db *sql.DB) (*LastStudySession, error) {
 		return nil, nil
 	}
 	if err != nil {
+		log.Printf("Error retrieving last study session: %v", err) // Log the error
 		return nil, err
 	}
 	return &session, nil

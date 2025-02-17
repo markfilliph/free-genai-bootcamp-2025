@@ -128,7 +128,7 @@ func DeleteWord(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
-func AddWordToGroup(db *sql.DB) gin.HandlerFunc {
+func AddWordToGroupFromWord(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		wordIDStr := c.Param("wordId")
 		wordID, err := strconv.Atoi(wordIDStr)
@@ -153,7 +153,7 @@ func AddWordToGroup(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
-func RemoveWordFromGroup(db *sql.DB) gin.HandlerFunc {
+func RemoveWordFromGroupHandler(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		wordIDStr := c.Param("wordId")
 		wordID, err := strconv.Atoi(wordIDStr)

@@ -5,8 +5,9 @@ import (
 )
 
 type Group struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 type GroupWithStats struct {
@@ -123,6 +124,56 @@ func UpdateGroup(db *sql.DB, group *Group) error {
 		SET name = ?
 		WHERE id = ?`,
 		group.Name, group.ID)
+	return err
+}
+
+// AddWordToGroup adds a word to a group
+func AddWordToGroup(db *sql.DB, groupID, wordID int) error {
+	// Check if group and word exist
+	var exists bool
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM groups WHERE id = ?)", groupID).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return sql.ErrNoRows
+	}
+
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM words WHERE id = ?)", wordID).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return sql.ErrNoRows
+	}
+
+	// Add word to group
+	_, err = db.Exec("INSERT INTO words_groups (group_id, word_id) VALUES (?, ?)", groupID, wordID)
+	return err
+}
+
+// RemoveWordFromGroup removes a word from a group
+func RemoveWordFromGroup(db *sql.DB, groupID, wordID int) error {
+	// Check if group and word exist
+	var exists bool
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM groups WHERE id = ?)", groupID).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return sql.ErrNoRows
+	}
+
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM words WHERE id = ?)", wordID).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return sql.ErrNoRows
+	}
+
+	// Remove word from group
+	_, err = db.Exec("DELETE FROM words_groups WHERE group_id = ? AND word_id = ?", groupID, wordID)
 	return err
 }
 
