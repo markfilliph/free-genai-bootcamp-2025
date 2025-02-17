@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "required": ["id", "japanese", "romaji", "english", "parts"],
+  "properties": {
+    "id": { "type": "integer" },
+    "japanese": { "type": "string" },
+    "romaji": { "type": "string" },
+    "english": { "type": "string" },
+    "parts": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "groups": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" }
+        }
+      }
+    }
+  }
+}

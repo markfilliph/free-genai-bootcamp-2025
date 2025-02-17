@@ -1,1 +1,10 @@
 *.db
+
+# Compiled binary
+app
+
+# Ruby/RSpec
+spec/vendor/
+spec/.bundle/
+*.gem
+.rspec_status

@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": ["items", "current_page", "total_pages", "total_items", "items_per_page"],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "word.json"
+      }
+    },
+    "current_page": { "type": "integer" },
+    "total_pages": { "type": "integer" },
+    "total_items": { "type": "integer" },
+    "items_per_page": { "type": "integer" }
+  }
+}
