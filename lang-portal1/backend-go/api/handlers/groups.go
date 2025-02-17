@@ -69,6 +69,78 @@ func GetGroupWords(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+type CreateGroupRequest struct {
+	Name string `json:"name" binding:"required"`
+}
+
+func CreateGroup(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req CreateGroupRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			respondWithError(c, http.StatusBadRequest, "Invalid request body")
+			return
+		}
+
+		group := &models.Group{
+			Name: req.Name,
+		}
+
+		if err := models.CreateGroup(db, group); err != nil {
+			respondWithError(c, http.StatusInternalServerError, "Failed to create group")
+			return
+		}
+
+		c.JSON(http.StatusCreated, group)
+	}
+}
+
+func UpdateGroup(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			respondWithError(c, http.StatusBadRequest, "Invalid group ID")
+			return
+		}
+
+		var req CreateGroupRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			respondWithError(c, http.StatusBadRequest, "Invalid request body")
+			return
+		}
+
+		group := &models.Group{
+			ID:   id,
+			Name: req.Name,
+		}
+
+		if err := models.UpdateGroup(db, group); err != nil {
+			respondWithError(c, http.StatusInternalServerError, "Failed to update group")
+			return
+		}
+
+		c.JSON(http.StatusOK, group)
+	}
+}
+
+func DeleteGroup(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			respondWithError(c, http.StatusBadRequest, "Invalid group ID")
+			return
+		}
+
+		if err := models.DeleteGroup(db, id); err != nil {
+			respondWithError(c, http.StatusInternalServerError, "Failed to delete group")
+			return
+		}
+
+		c.Status(http.StatusNoContent)
+	}
+}
+
 func GetGroupStudySessions(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		idStr := c.Param("id")

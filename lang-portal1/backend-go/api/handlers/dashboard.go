@@ -24,7 +24,7 @@ func GetLastStudySession(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
-func GetStudyProgress(db *sql.DB) gin.HandlerFunc {
+func GetDailyStudyProgress(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		progress, err := models.GetStudyProgress(db)
 		if err != nil {

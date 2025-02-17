@@ -13,7 +13,7 @@ func SetupRoutes(r *gin.Engine, db *sql.DB) {
 
 	// Dashboard routes
 	api.GET("/dashboard/last_study_session", handlers.GetLastStudySession(db))
-	api.GET("/dashboard/study_progress", handlers.GetStudyProgress(db))
+	api.GET("/dashboard/study_progress", handlers.GetDailyStudyProgress(db))
 	api.GET("/dashboard/quick-stats", handlers.GetQuickStats(db))
 
 	// Study activity routes
@@ -23,12 +23,30 @@ func SetupRoutes(r *gin.Engine, db *sql.DB) {
 
 	// Word routes
 	api.GET("/words", handlers.GetWords(db))
-	api.GET("/words/:id", handlers.GetWord(db))
+	api.POST("/words", handlers.CreateWord(db))
+	
+	// Single word routes
+	wordRoutes := api.Group("/words/:id")
+	{
+		wordRoutes.GET("", handlers.GetWord(db))
+		wordRoutes.PUT("", handlers.UpdateWord(db))
+		wordRoutes.DELETE("", handlers.DeleteWord(db))
+	}
+
+	// Word-group relationship routes
+	wordGroupRoutes := api.Group("/word-groups")
+	{
+		wordGroupRoutes.POST("/:wordId/:groupId", handlers.AddWordToGroup(db))
+		wordGroupRoutes.DELETE("/:wordId/:groupId", handlers.RemoveWordFromGroup(db))
+	}
 
 	// Group routes
 	api.GET("/groups", handlers.GetGroups(db))
 	api.GET("/groups/:id", handlers.GetGroup(db))
 	api.GET("/groups/:id/words", handlers.GetGroupWords(db))
+	api.POST("/groups", handlers.CreateGroup(db))
+	api.PUT("/groups/:id", handlers.UpdateGroup(db))
+	api.DELETE("/groups/:id", handlers.DeleteGroup(db))
 	api.GET("/groups/:id/study_sessions", handlers.GetGroupStudySessions(db))
 
 	// Study session routes

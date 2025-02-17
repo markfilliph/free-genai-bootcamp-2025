@@ -86,3 +86,74 @@ func GetWord(db *sql.DB, id int) (*WordWithGroups, error) {
 
 	return &w, nil
 }
+
+// CreateWord creates a new word
+func CreateWord(db *sql.DB, word *Word) error {
+	result, err := db.Exec(`
+		INSERT INTO words (japanese, romaji, english, parts)
+		VALUES (?, ?, ?, ?)`,
+		word.Japanese, word.Romaji, word.English, word.Parts)
+	if err != nil {
+		return err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	word.ID = int(id)
+	return nil
+}
+
+// UpdateWord updates an existing word
+func UpdateWord(db *sql.DB, word *Word) error {
+	_, err := db.Exec(`
+		UPDATE words 
+		SET japanese = ?, romaji = ?, english = ?, parts = ?
+		WHERE id = ?`,
+		word.Japanese, word.Romaji, word.English, word.Parts, word.ID)
+	return err
+}
+
+// DeleteWord deletes a word and its group associations
+func DeleteWord(db *sql.DB, id int) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	// Delete from word_groups first (foreign key constraint)
+	_, err = tx.Exec("DELETE FROM words_groups WHERE word_id = ?", id)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Delete the word
+	_, err = tx.Exec("DELETE FROM words WHERE id = ?", id)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// AddWordToGroup adds a word to a group
+func AddWordToGroup(db *sql.DB, wordID, groupID int) error {
+	_, err := db.Exec(`
+		INSERT INTO words_groups (word_id, group_id)
+		VALUES (?, ?)
+		ON CONFLICT (word_id, group_id) DO NOTHING`,
+		wordID, groupID)
+	return err
+}
+
+// RemoveWordFromGroup removes a word from a group
+func RemoveWordFromGroup(db *sql.DB, wordID, groupID int) error {
+	_, err := db.Exec(`
+		DELETE FROM words_groups
+		WHERE word_id = ? AND group_id = ?`,
+		wordID, groupID)
+	return err
+}

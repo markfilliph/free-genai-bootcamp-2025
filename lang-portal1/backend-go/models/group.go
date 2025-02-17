@@ -97,3 +97,55 @@ func GetGroupWords(db *sql.DB, groupID int) ([]Word, error) {
 
 	return words, nil
 }
+
+// CreateGroup creates a new group
+func CreateGroup(db *sql.DB, group *Group) error {
+	result, err := db.Exec(`
+		INSERT INTO groups (name)
+		VALUES (?)`,
+		group.Name)
+	if err != nil {
+		return err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	group.ID = int(id)
+	return nil
+}
+
+// UpdateGroup updates an existing group
+func UpdateGroup(db *sql.DB, group *Group) error {
+	_, err := db.Exec(`
+		UPDATE groups 
+		SET name = ?
+		WHERE id = ?`,
+		group.Name, group.ID)
+	return err
+}
+
+// DeleteGroup deletes a group and its word associations
+func DeleteGroup(db *sql.DB, id int) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	// Delete from word_groups first (foreign key constraint)
+	_, err = tx.Exec("DELETE FROM words_groups WHERE group_id = ?", id)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Delete the group
+	_, err = tx.Exec("DELETE FROM groups WHERE id = ?", id)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
