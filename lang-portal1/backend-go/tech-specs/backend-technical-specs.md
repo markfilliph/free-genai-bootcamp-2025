@@ -21,36 +21,31 @@ A language learning school wants to build a prototype of learning portal which w
 
 ```text
 backend_go/
-├── cmd/
-│   └── server/
-│       └── main.go                 # Main application entry point
-├── internal/
-│   ├── models/                     # Data structures and database operations
-│   │   ├── db.go                  # Database connection and initialization
-│   │   ├── word.go                # Word model and operations
-│   │   ├── group.go               # Group model and operations
-│   │   ├── study_session.go       # Study session model
-│   │   ├── study_activity.go      # Study activity model
-│   │   └── word_review.go         # Word review model
-│   ├── handlers/                   # HTTP handlers organized by feature
-│   │   ├── dashboard.go           # Dashboard related endpoints
-│   │   ├── words.go               # Word management endpoints
-│   │   ├── groups.go              # Group management endpoints
-│   │   ├── study.go               # Study session endpoints
-│   │   └── reset.go               # Reset functionality endpoints
-│   └── service/                    # Business logic layer
-│       ├── dashboard.go           # Dashboard business logic
-│       ├── words.go               # Word management logic
-│       ├── groups.go              # Group management logic
-│       └── study.go               # Study session logic
+├── main.go                  # Main application entry point
 ├── db/
-│   ├── migrations/
-│   │   └── 001_initial_schema.sql # Database schema
-│   └── seeds/                     # Initial data population
-│       └── initial_data.sql       # Seed data for testing
-├── magefile.go                    # Task definitions for build, test, migrate
-├── go.mod                         # Go module definition
-└── words.db                       # SQLite database file (will be created by the app)
+│   ├── db.go               # Database connection and initialization
+│   ├── migrations/         # Database migrations
+│   │   ├── 001_initial_schema.sql
+│   │   └── 002_add_indexes.sql
+│   └── seeds/              # Folder for seed data
+│       ├── words.sql       # Seed data for words
+│       ├── groups.sql      # Seed data for groups
+│       └── activities.sql  # Seed data for study activities
+├── models/                  # Data structures and database models
+│   ├── word.go
+│   ├── group.go
+│   ├── study.go            # Combined study session and activity models
+│   └── stats.go            # Dashboard statistics models
+├── api/                    # API routes and handlers
+│   ├── routes.go          # Route definitions and middleware
+│   └── handlers/          # HTTP handlers for endpoints
+│       ├── dashboard.go   # Dashboard endpoints
+│       ├── words.go       # Word management endpoints
+│       ├── groups.go      # Group management endpoints
+│       └── study.go       # Study session and activity endpoints
+├── magefile.go            # Task definitions for build, test, migrate
+├── go.mod                 # Go module definition
+└── words.db              # SQLite database file
 ```
 
 ## Database Schema
@@ -464,4 +459,3 @@ In our task we should have DSL to specific each seed file and its expected group
   },
   ...
 ]
-```
