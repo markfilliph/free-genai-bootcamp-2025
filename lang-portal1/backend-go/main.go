@@ -3,9 +3,10 @@ package main
 import (
 	"log"
 
-	"github.com/gin-gonic/gin"
 	"lang-portal/backend/api"
 	"lang-portal/backend/db"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -31,6 +32,9 @@ func main() {
 
 		c.Next()
 	})
+
+	// Serve static files
+	r.StaticFile("/test", "./test.html")
 
 	// Setup API routes
 	api.SetupRoutes(r, db.DB)

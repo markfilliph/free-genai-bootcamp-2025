@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; white-space: pre-wrap; }
+        button { margin: 5px; padding: 5px 10px; }
+        input { margin: 5px; padding: 5px; }
+    </style>
+</head>
+<body>
+    <h1>API Test Page</h1>
+    
+    <h2>Words</h2>
+    <button onclick="fetchWords()">Get All Words</button>
+    <div>
+        <input type="number" id="wordId" placeholder="Word ID">
+        <button onclick="fetchWord()">Get Word</button>
+    </div>
+    <div>
+        <input type="text" id="japanese" placeholder="Japanese">
+        <input type="text" id="romaji" placeholder="Romaji">
+        <input type="text" id="english" placeholder="English">
+        <button onclick="createWord()">Create Word</button>
+    </div>
+
+    <h2>Groups</h2>
+    <button onclick="fetchGroups()">Get All Groups</button>
+    <div>
+        <input type="number" id="groupId" placeholder="Group ID">
+        <button onclick="fetchGroup()">Get Group</button>
+    </div>
+    <div>
+        <input type="text" id="groupName" placeholder="Group Name">
+        <button onclick="createGroup()">Create Group</button>
+    </div>
+
+    <h2>Dashboard</h2>
+    <button onclick="fetchStats()">Get Quick Stats</button>
+    <button onclick="fetchProgress()">Get Study Progress</button>
+
+    <h2>Result:</h2>
+    <div id="result" class="result"></div>
+
+    <script>
+        const baseUrl = 'http://localhost:8080/api';
+        const result = document.getElementById('result');
+
+        function showResult(data) {
+            result.textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function fetchWords() {
+            const response = await fetch(`${baseUrl}/words`);
+            showResult(await response.json());
+        }
+
+        async function fetchWord() {
+            const id = document.getElementById('wordId').value;
+            const response = await fetch(`${baseUrl}/words/${id}`);
+            showResult(await response.json());
+        }
+
+        async function createWord() {
+            const word = {
+                japanese: document.getElementById('japanese').value,
+                romaji: document.getElementById('romaji').value,
+                english: document.getElementById('english').value,
+                parts: ["noun"]
+            };
+            const response = await fetch(`${baseUrl}/words`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(word)
+            });
+            showResult(await response.json());
+        }
+
+        async function fetchGroups() {
+            const response = await fetch(`${baseUrl}/groups`);
+            showResult(await response.json());
+        }
+
+        async function fetchGroup() {
+            const id = document.getElementById('groupId').value;
+            const response = await fetch(`${baseUrl}/groups/${id}`);
+            showResult(await response.json());
+        }
+
+        async function createGroup() {
+            const group = {
+                name: document.getElementById('groupName').value
+            };
+            const response = await fetch(`${baseUrl}/groups`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(group)
+            });
+            showResult(await response.json());
+        }
+
+        async function fetchStats() {
+            const response = await fetch(`${baseUrl}/dashboard/quick-stats`);
+            showResult(await response.json());
+        }
+
+        async function fetchProgress() {
+            const response = await fetch(`${baseUrl}/dashboard/study_progress`);
+            showResult(await response.json());
+        }
+    </script>
+</body>
+</html>
