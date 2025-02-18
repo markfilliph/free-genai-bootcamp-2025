@@ -1,3 +1,5 @@
+import httpx
+import json
 from .constants import ServiceType, ServiceRoleType
 
 class MicroService:
@@ -12,6 +14,7 @@ class MicroService:
         self.input_datatype = input_datatype
         self.output_datatype = output_datatype
         self.routes = {}
+        self._client = httpx.AsyncClient()
 
     def add_route(self, path, handler, methods=None):
         if methods is None:
@@ -20,6 +23,31 @@ class MicroService:
 
     def start(self):
         print(f"Starting {self.name} service on {self.host}:{self.port}")
+
+    async def close(self):
+        await self._client.aclose()
+
+    @property
+    def base_url(self):
+        return f"http://{self.host}:{self.port}{self.endpoint}"
+
+    async def call_service(self, request_data):
+        try:
+            response = await self._client.post(
+                self.base_url,
+                json=request_data,
+                headers={"Content-Type": "application/json"}
+            )
+            response.raise_for_status()
+            response_json = response.json()
+            # Handle Ollama's response format
+            if 'response' in response_json and not response_json.get('done', False):
+                # This is a streaming response, we'll just take the first part
+                return {"response": response_json['response']}
+            return response_json
+        except httpx.HTTPError as e:
+            print(f"Error calling service {self.name}: {str(e)}")
+            return {"error": str(e)}
 
 class ServiceOrchestrator:
     def __init__(self):
@@ -37,11 +65,13 @@ class ServiceOrchestrator:
         return self
 
     async def schedule(self, request):
-        # This is a simplified implementation
         results = []
         for service_name, service in self.services.items():
             if service.service_type == ServiceType.LLM:
-                # Simulate LLM service response
-                response = {"llm/MicroService": {"body": "Simulated LLM response"}}
-                results.append(response)
+                try:
+                    response = await service.call_service(request)
+                    results.append({"llm/MicroService": {"body": response.get("response", "No response content")}})
+                except Exception as e:
+                    print(f"Error in LLM service: {str(e)}")
+                    results.append({"llm/MicroService": {"body": f"Error: {str(e)}"}})
         return results

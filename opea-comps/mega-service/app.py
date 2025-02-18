@@ -1,4 +1,4 @@
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from comps.cores.proto.api_protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -8,16 +8,20 @@ from comps.cores.proto.api_protocol import (
 )
 from comps.cores.mega.constants import ServiceType, ServiceRoleType
 from comps import MicroService, ServiceOrchestrator
+import uvicorn
 import os
 
 EMBEDDING_SERVICE_HOST_IP = os.getenv("EMBEDDING_SERVICE_HOST_IP", "0.0.0.0")
 EMBEDDING_SERVICE_PORT = os.getenv("EMBEDDING_SERVICE_PORT", 6000)
-LLM_SERVICE_HOST_IP = os.getenv("LLM_SERVICE_HOST_IP", "0.0.0.0")
-LLM_SERVICE_PORT = os.getenv("LLM_SERVICE_PORT", 9000)
+LLM_SERVICE_HOST_IP = os.getenv("LLM_SERVICE_HOST_IP", "localhost")
+LLM_SERVICE_PORT = int(os.getenv("LLM_SERVICE_PORT", 9000))
 
+app = FastAPI()
+
+SERVICE_PORT = int(os.getenv("SERVICE_PORT", 8008))
 
 class ExampleService:
-    def __init__(self, host="0.0.0.0", port=8000):
+    def __init__(self, host="0.0.0.0", port=SERVICE_PORT):
         print('hello')
         os.environ["TELEMETRY_ENDPOINT"] = ""
         self.host = host
@@ -26,69 +30,32 @@ class ExampleService:
         self.megaservice = ServiceOrchestrator()
 
     def add_remote_service(self):
-        #embedding = MicroService(
-        #    name="embedding",
-        #    host=EMBEDDING_SERVICE_HOST_IP,
-        #    port=EMBEDDING_SERVICE_PORT,
-        #    endpoint="/v1/embeddings",
-        #    use_remote_service=True,
-        #    service_type=ServiceType.EMBEDDING,
-        #)
         llm = MicroService(
             name="llm",
             host=LLM_SERVICE_HOST_IP,
             port=LLM_SERVICE_PORT,
-            endpoint="/v1/chat/completions",
+            endpoint="/api/generate",
             use_remote_service=True,
             service_type=ServiceType.LLM,
         )
-        #self.megaservice.add(embedding).add(llm)
-        #self.megaservice.flow_to(embedding, llm)
         self.megaservice.add(llm)
-    
-    def start(self):
 
-        self.service = MicroService(
-            self.__class__.__name__,
-            service_role=ServiceRoleType.MEGASERVICE,
-            host=self.host,
-            port=self.port,
-            endpoint=self.endpoint,
-            input_datatype=ChatCompletionRequest,
-            output_datatype=ChatCompletionResponse,
-        )
-
-        self.service.add_route(self.endpoint, self.handle_request, methods=["POST"])
-
-        self.service.start()
     async def handle_request(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
         try:
             # Format the request for Ollama
             ollama_request = {
-                "model": request.model or "llama3.2:1b",  # or whatever default model you're using
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": request.messages  # assuming messages is a string
-                    }
-                ],
-                "stream": False  # disable streaming for now
+                "model": request.model,
+                "prompt": request.messages,
+                "stream": False
             }
             
             # Schedule the request through the orchestrator
             result = await self.megaservice.schedule(ollama_request)
             
             # Extract the actual content from the response
-            if isinstance(result, tuple) and len(result) > 0:
+            if isinstance(result, list) and len(result) > 0:
                 llm_response = result[0].get('llm/MicroService')
-                if hasattr(llm_response, 'body'):
-                    # Read and process the response
-                    response_body = b""
-                    async for chunk in llm_response.body_iterator:
-                        response_body += chunk
-                    content = response_body.decode('utf-8')
-                else:
-                    content = "No response content available"
+                content = llm_response.get('body', "No response content available")
             else:
                 content = "Invalid response format"
 
@@ -118,6 +85,12 @@ class ExampleService:
             # Handle any errors
             raise HTTPException(status_code=500, detail=str(e))
 
-example = ExampleService()
+example = ExampleService(host="0.0.0.0", port=LLM_SERVICE_PORT)
 example.add_remote_service()
-example.start()
+
+@app.post("/v1/example-service")
+async def handle_chat_request(request: ChatCompletionRequest):
+    return await example.handle_request(request)
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=SERVICE_PORT)

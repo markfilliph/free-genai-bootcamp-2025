@@ -1,2 +1,4 @@
 opea-comps
 fastapi
+uvicorn
+httpx
