@@ -2,34 +2,31 @@ import chromadb
 from chromadb.utils import embedding_functions
 import json
 import os
-import boto3
 from typing import Dict, List, Optional
+from sentence_transformers import SentenceTransformer
 
-class BedrockEmbeddingFunction(embedding_functions.EmbeddingFunction):
-    def __init__(self, model_id="amazon.titan-embed-text-v1"):
-        """Initialize Bedrock embedding function"""
-        self.bedrock_client = boto3.client('bedrock-runtime', region_name="us-east-1")
-        self.model_id = model_id
+class SentenceTransformerEmbedding(embedding_functions.EmbeddingFunction):
+    def __init__(self, model_name="all-MiniLM-L6-v2"):
+        """Initialize sentence-transformers embedding function"""
+        self.model_name = model_name
+        self._model = None
+        
+    @property
+    def model(self):
+        """Lazy load the model"""
+        if self._model is None:
+            self._model = SentenceTransformer(self.model_name)
+        return self._model
 
     def __call__(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for a list of texts using Bedrock"""
-        embeddings = []
-        for text in texts:
-            try:
-                response = self.bedrock_client.invoke_model(
-                    modelId=self.model_id,
-                    body=json.dumps({
-                        "inputText": text
-                    })
-                )
-                response_body = json.loads(response['body'].read())
-                embedding = response_body['embedding']
-                embeddings.append(embedding)
-            except Exception as e:
-                print(f"Error generating embedding: {str(e)}")
-                # Return a zero vector as fallback
-                embeddings.append([0.0] * 1536)  # Titan model uses 1536 dimensions
-        return embeddings
+        """Generate embeddings for a list of texts using sentence-transformers"""
+        try:
+            embeddings = self.model.encode(texts, convert_to_tensor=False)
+            return embeddings.tolist()
+        except Exception as e:
+            print(f"Error generating embeddings: {str(e)}")
+            # Return zero vectors as fallback
+            return [[0.0] * 384] * len(texts)  # MiniLM embeddings are 384-dimensional
 
 class QuestionVectorStore:
     def __init__(self, persist_directory: str = "backend/data/vectorstore"):
@@ -39,22 +36,81 @@ class QuestionVectorStore:
         # Initialize ChromaDB client
         self.client = chromadb.PersistentClient(path=persist_directory)
         
-        # Use Bedrock's Titan embedding model
-        self.embedding_fn = BedrockEmbeddingFunction()
+        # Use sentence-transformers embedding model
+        self.embedding_fn = SentenceTransformerEmbedding()
         
-        # Create or get collections for each section type
+        # Reset collections to ensure correct embedding dimensions
+        self._reset_collections()
+        
+    def _reset_collections(self):
+        """Reset collections to ensure correct embedding dimensions"""
+        # Delete existing collections if they exist
+        try:
+            self.client.delete_collection("section2_questions")
+            self.client.delete_collection("section3_questions")
+        except Exception:
+            pass
+
+        # Create collections with embedding function
+        self.section2_collection = self.client.create_collection(
+            name="section2_questions",
+            embedding_function=self.embedding_fn
+        )
+
+        self.section3_collection = self.client.create_collection(
+            name="section3_questions",
+            embedding_function=self.embedding_fn
+        )
+
+        # Load and add example questions
+        self._load_example_questions()
+
+        # Create new collections
         self.collections = {
-            "section2": self.client.get_or_create_collection(
+            "section2": self.client.create_collection(
                 name="section2_questions",
                 embedding_function=self.embedding_fn,
                 metadata={"description": "JLPT listening comprehension questions - Section 2"}
             ),
-            "section3": self.client.get_or_create_collection(
+            "section3": self.client.create_collection(
                 name="section3_questions",
                 embedding_function=self.embedding_fn,
-                metadata={"description": "JLPT phrase matching questions - Section 3"}
+                metadata={"description": "JLPT listening comprehension questions - Section 3"}
             )
         }
+
+    def add_question(self, section_num: int, question: Dict, topic: str) -> None:
+        """Add a question to the vector store
+        
+        Args:
+            section_num: Section number (2 or 3)
+            question: Question dictionary containing all fields
+            topic: Topic category for the question
+        """
+        collection = self.collections[f"section{section_num}"]
+        
+        # Create document text based on section type
+        if section_num == 2:
+            doc_text = f"Introduction: {question['Introduction']}\n"
+            doc_text += f"Conversation: {question['Conversation']}\n"
+            doc_text += f"Question: {question['Question']}\n"
+            doc_text += f"Options: {', '.join(question['Options'])}"
+        else:
+            doc_text = f"Situation: {question['Situation']}\n"
+            doc_text += f"Content: {question.get('Content', '')}\n"
+            doc_text += f"Question: {question['Question']}\n"
+            doc_text += f"Options: {', '.join(question['Options'])}"
+        
+        # Add to collection
+        collection.add(
+            documents=[doc_text],
+            metadatas=[{
+                "topic": topic,
+                "section": section_num,
+                **{k: str(v) for k, v in question.items()}
+            }],
+            ids=[f"q_{section_num}_{len(collection.get()['ids']) + 1}"]
+        )
 
     def add_questions(self, section_num: int, questions: List[Dict], video_id: str):
         """Add questions to the vector store"""
@@ -121,7 +177,25 @@ class QuestionVectorStore:
         # Convert results to more usable format
         questions = []
         for idx, metadata in enumerate(results['metadatas'][0]):
-            question_data = json.loads(metadata['full_structure'])
+            # Reconstruct question from metadata fields
+            if section_num == 2:
+                question_data = {
+                    "Introduction": metadata.get("Introduction", ""),
+                    "Conversation": metadata.get("Conversation", ""),
+                    "Question": metadata.get("Question", ""),
+                    "Options": metadata.get("Options", "").split(", ") if metadata.get("Options") else [],
+                    "CorrectAnswer": int(metadata.get("CorrectAnswer", "1")),
+                    "Explanation": metadata.get("Explanation", "")
+                }
+            else:
+                question_data = {
+                    "Situation": metadata.get("Situation", ""),
+                    "Content": metadata.get("Content", ""),
+                    "Question": metadata.get("Question", ""),
+                    "Options": metadata.get("Options", "").split(", ") if metadata.get("Options") else [],
+                    "CorrectAnswer": int(metadata.get("CorrectAnswer", "1")),
+                    "Explanation": metadata.get("Explanation", "")
+                }
             question_data['similarity_score'] = results['distances'][0][idx]
             questions.append(question_data)
             

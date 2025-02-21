@@ -1,0 +1,25 @@
+{
+    "How do I say 'hello' in Japanese?": "In Japanese, 'hello' is 'こんにちは' (konnichiwa). For morning, use 'おはようございます' (ohayou gozaimasu), and for evening use 'こんばんは' (konbanwa).",
+    
+    "How do I say 'thank you' in Japanese?": "In Japanese, 'thank you' is 'ありがとう' (arigatou). The polite form is 'ありがとうございます' (arigatou gozaimasu).",
+    
+    "How do I say 'goodbye' in Japanese?": "In Japanese, 'goodbye' is 'さようなら' (sayounara). For casual situations, you can use 'じゃあね' (jaa ne).",
+    
+    "What's the difference between は and が?": "は (wa) marks the topic of the sentence, while が (ga) marks the subject. は is used for known information or contrast, while が is used for new information or emphasis.",
+    
+    "How do I count objects in Japanese?": "Japanese uses different counters based on the type of object. Common ones: つ (tsu) for general items, 人 (nin) for people, 本 (hon) for long objects, 枚 (mai) for flat objects.",
+    
+    "What's the polite form of 食べる?": "The polite form of 食べる (taberu) is 食べます (tabemasu). For past tense: 食べました (tabemashita). For negative: 食べません (tabemasen).",
+    
+    "How do I say 'Where is the train station?' in Japanese?": "駅はどこですか？ (Eki wa doko desu ka?) is how you say 'Where is the train station?' in Japanese. A more polite version is 駅はどちらですか？ (Eki wa dochira desu ka?)",
+    
+    "What are basic greetings in Japanese?": "Basic Japanese greetings:\n- Morning: おはようございます (ohayou gozaimasu)\n- Daytime: こんにちは (konnichiwa)\n- Evening: こんばんは (konbanwa)\n- Goodbye: さようなら (sayounara)",
+    
+    "How do I introduce myself in Japanese?": "Basic self-introduction: 初めまして。[Your Name]です。よろしくお願いします。(Hajimemashite. [Your Name] desu. Yoroshiku onegaishimasu.)",
+    
+    "What are the basic particles in Japanese?": "Common Japanese particles:\n- は (wa): topic marker\n- が (ga): subject marker\n- を (wo): object marker\n- に (ni): location/target\n- で (de): location of action/means",
+    
+    "How do I ask 'what' in Japanese?": "To ask 'what' in Japanese:\n- なに/何 (nani): general 'what'\n- どれ (dore): which one\n- どの (dono): which (when followed by a noun)\n- どう (dou): how/in what way",
+    
+    "What are the basic numbers in Japanese?": "Basic numbers in Japanese:\n1: 一 (ichi)\n2: 二 (ni)\n3: 三 (san)\n4: 四 (yon/shi)\n5: 五 (go)\n6: 六 (roku)\n7: 七 (nana/shichi)\n8: 八 (hachi)\n9: 九 (kyuu/ku)\n10: 十 (juu)"
+}

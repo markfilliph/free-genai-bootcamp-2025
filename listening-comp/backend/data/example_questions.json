@@ -1,0 +1,38 @@
+{
+    "section2_questions": [
+        {
+            "Introduction": "At a restaurant",
+            "Conversation": "A: すみません、メニューをお願いします。\nB: はい、少々お待ちください。",
+            "Question": "What is the customer asking for?",
+            "Options": ["A menu", "The bill", "Water", "A table"],
+            "CorrectAnswer": 1,
+            "Explanation": "The customer says 'メニューをお願いします' which means 'Please give me a menu.'"
+        },
+        {
+            "Introduction": "At a train station",
+            "Conversation": "A: すみません、新宿駅はどこですか？\nB: あ、この先の角を右に曲がってください。",
+            "Question": "Where is Shinjuku station?",
+            "Options": ["Turn right at the corner ahead", "Turn left at the traffic light", "Go straight for 5 minutes", "Take the escalator"],
+            "CorrectAnswer": 1,
+            "Explanation": "The person says 'この先の角を右に曲がってください' which means 'Turn right at the corner ahead.'"
+        }
+    ],
+    "section3_questions": [
+        {
+            "Situation": "At a train station",
+            "Content": "電車は10分遅れています。",
+            "Question": "What is the announcement about?",
+            "Options": ["The train is 10 minutes late", "The train is arriving", "The train is cancelled", "The train is full"],
+            "CorrectAnswer": 1,
+            "Explanation": "The announcement says '電車は10分遅れています' which means 'The train is 10 minutes late.'"
+        },
+        {
+            "Situation": "Weather forecast",
+            "Content": "明日は雨が降るでしょう。傘を持って行ってください。",
+            "Question": "What should you take with you tomorrow?",
+            "Options": ["An umbrella", "A jacket", "Sunglasses", "A hat"],
+            "CorrectAnswer": 1,
+            "Explanation": "The forecast says '傘を持って行ってください' which means 'Please take an umbrella.'"
+        }
+    ]
+}
