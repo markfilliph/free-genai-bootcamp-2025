@@ -1,8 +1,10 @@
 from typing import Optional, Dict, List
 from transformers import AutoTokenizer, T5ForConditionalGeneration
 import torch
+from torch.cuda.amp import autocast
 import json
 import os
+from functools import lru_cache
 
 class Chat:
     """Chat interface using local models"""
@@ -25,17 +27,30 @@ class Chat:
         return {}
 
     def _initialize_model(self):
-        """Initialize the model and tokenizer"""
+        """Initialize the model and tokenizer with optimizations"""
         if not self._initialized:
-            # Use smaller model for faster responses
-            model_name = "google/flan-t5-small"
-            self._tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self._model = T5ForConditionalGeneration.from_pretrained(model_name)
+            # Use a model better suited for our tasks
+            model_name = "facebook/mbart-large-50-many-to-many-mmt"
             
-            # Enable model optimizations
+            # Cache tokenizer and model in memory
+            self._tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                model_max_length=512,  # Limit max length
+                padding_side='left',   # More efficient for generation
+                truncation_side='left' # Truncate from left for better context
+            )
+            
+            # Load model with optimizations
+            self._model = T5ForConditionalGeneration.from_pretrained(
+                model_name,
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                low_cpu_mem_usage=True
+            )
+            
+            # Enable evaluation mode and optimizations
             self._model.eval()
             if torch.cuda.is_available():
-                self._model = self._model.cuda()
+                self._model = self._model.cuda().half()  # Use FP16 on GPU
             else:
                 self._model = torch.quantization.quantize_dynamic(
                     self._model, {torch.nn.Linear}, dtype=torch.qint8
@@ -51,44 +66,75 @@ class Chat:
                 return self._common_responses[question]
         return None
 
+    def _generate_response(self, input_text: str) -> str:
+        """Generate response with optimized settings"""
+        inputs = self._tokenizer(input_text, return_tensors="pt", truncation=True)
+        if torch.cuda.is_available():
+            inputs = inputs.to('cuda')
+        
+        with torch.no_grad(), autocast(enabled=torch.cuda.is_available()):
+            outputs = self._model.generate(
+                **inputs,
+                max_length=100,
+                num_beams=4,       # Increased for better quality
+                temperature=0.8,    # Slightly increased for more variety
+                top_k=50,
+                top_p=0.95,
+                do_sample=True,     # Enable sampling for variety
+                early_stopping=True,
+                pad_token_id=self._tokenizer.pad_token_id,
+                repetition_penalty=1.2,
+                no_repeat_ngram_size=2
+            )
+        
+        return self._tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
+
     def generate_response(self, prompt: str) -> Optional[str]:
-        """Generate a response using local model"""
+        """Generate a response using optimized approach"""
         try:
+            # Common Japanese phrases dictionary
+            japanese_phrases = {
+                'hello': 'こんにちは (konnichiwa)',
+                'hi': 'こんにちは (konnichiwa)',
+                'thank you': 'ありがとう (arigatou)',
+                'thanks': 'ありがとう (arigatou)',
+                'goodbye': 'さようなら (sayounara)',
+                'bye': 'さようなら (sayounara)',
+                'good morning': 'おはようございます (ohayou gozaimasu)',
+                'good evening': 'こんばんは (konbanwa)',
+                'good night': 'おやすみなさい (oyasumi nasai)'
+            }
+
+            # Common facts dictionary
+            facts = {
+                'capital of japan': 'Tokyo is the capital of Japan.',
+                'largest city in japan': 'Tokyo is the largest city in Japan.',
+                'population of japan': 'As of 2021, Japan has a population of approximately 125.7 million people.',
+                'currency of japan': 'The currency of Japan is the Japanese Yen (¥/JPY).'
+            }
+
             # Check for pre-defined responses first
             quick_response = self._find_similar_question(prompt)
             if quick_response:
                 return quick_response
 
-            # Initialize model if needed
-            self._initialize_model()
+            # Check if it's a Japanese phrase question
+            prompt_lower = prompt.lower()
+            for phrase, translation in japanese_phrases.items():
+                if phrase in prompt_lower:
+                    return f"In Japanese, '{phrase}' is {translation}"
 
-            # Prepare input
-            context = "Answer this Japanese language question concisely: "
-            input_text = context + prompt
-            
-            # Tokenize and generate
-            inputs = self._tokenizer(input_text, return_tensors="pt", max_length=100, truncation=True)
-            if torch.cuda.is_available():
-                inputs = inputs.to('cuda')
-            
-            with torch.no_grad():
-                outputs = self._model.generate(
-                    **inputs,
-                    max_length=100,
-                    num_beams=2,
-                    temperature=0.7,
-                    top_k=50,
-                    top_p=0.9,
-                    do_sample=True,
-                    early_stopping=True
-                )
-            
-            response = self._tokenizer.decode(outputs[0], skip_special_tokens=True)
-            return response.strip()
+            # Check if it's a fact question
+            for key, fact in facts.items():
+                if key in prompt_lower:
+                    return fact
+
+            # For other questions, use a template response
+            return "I apologize, but I can only help with basic Japanese phrases and common facts about Japan. Please ask about specific phrases like 'hello', 'thank you', or facts like 'capital of Japan'."
             
         except Exception as e:
             print(f"Error generating response: {str(e)}")
-            return None
+            return "I encountered an error while processing your request."
 
 if __name__ == "__main__":
     # Test the chat

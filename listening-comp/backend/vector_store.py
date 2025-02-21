@@ -4,9 +4,11 @@ import json
 import os
 from typing import Dict, List, Optional
 from sentence_transformers import SentenceTransformer
+from langdetect import detect
+from googletrans import Translator
 
 class SentenceTransformerEmbedding(embedding_functions.EmbeddingFunction):
-    def __init__(self, model_name="all-MiniLM-L6-v2"):
+    def __init__(self, model_name="paraphrase-multilingual-mpnet-base-v2"):
         """Initialize sentence-transformers embedding function"""
         self.model_name = model_name
         self._model = None
@@ -201,98 +203,172 @@ class QuestionVectorStore:
             
         return questions
 
-    def get_question_by_id(self, section_num: int, question_id: str) -> Optional[Dict]:
-        """Retrieve a specific question by its ID"""
-        if section_num not in [2, 3]:
-            raise ValueError("Only sections 2 and 3 are currently supported")
+    def _load_example_questions(self):
+        """Load example questions from JSON files"""
+        example_dir = os.path.join(self.persist_directory, "examples")
+        if not os.path.exists(example_dir):
+            return
             
-        collection = self.collections[f"section{section_num}"]
-        
-        result = collection.get(
-            ids=[question_id],
-            include=['metadatas']
-        )
-        
-        if result['metadatas']:
-            return json.loads(result['metadatas'][0]['full_structure'])
-        return None
-
-    def parse_questions_from_file(self, filename: str) -> List[Dict]:
-        """Parse questions from a structured text file"""
-        questions = []
-        current_question = {}
-        
-        try:
-            with open(filename, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
+        for filename in os.listdir(example_dir):
+            if not filename.endswith(".json"):
+                continue
                 
-            i = 0
-            while i < len(lines):
-                line = lines[i].strip()
+            section_num = int(filename[7])  # e.g. section2_examples.json
+            with open(os.path.join(example_dir, filename)) as f:
+                questions = json.load(f)
                 
-                if line.startswith('<question>'):
-                    current_question = {}
-                elif line.startswith('Introduction:'):
-                    i += 1
-                    if i < len(lines):
-                        current_question['Introduction'] = lines[i].strip()
-                elif line.startswith('Conversation:'):
-                    i += 1
-                    if i < len(lines):
-                        current_question['Conversation'] = lines[i].strip()
-                elif line.startswith('Situation:'):
-                    i += 1
-                    if i < len(lines):
-                        current_question['Situation'] = lines[i].strip()
-                elif line.startswith('Question:'):
-                    i += 1
-                    if i < len(lines):
-                        current_question['Question'] = lines[i].strip()
-                elif line.startswith('Options:'):
-                    options = []
-                    for _ in range(4):
-                        i += 1
-                        if i < len(lines):
-                            option = lines[i].strip()
-                            if option.startswith('1.') or option.startswith('2.') or option.startswith('3.') or option.startswith('4.'):
-                                options.append(option[2:].strip())
-                    current_question['Options'] = options
-                elif line.startswith('</question>'):
-                    if current_question:
-                        questions.append(current_question)
-                        current_question = {}
-                i += 1
-            return questions
-        except Exception as e:
-            print(f"Error parsing questions from {filename}: {str(e)}")
-            return []
-
-    def index_questions_file(self, filename: str, section_num: int):
-        """Index all questions from a file into the vector store"""
-        # Extract video ID from filename
-        video_id = os.path.basename(filename).split('_section')[0]
-        
-        # Parse questions from file
-        questions = self.parse_questions_from_file(filename)
-        
-        # Add to vector store
-        if questions:
+            video_id = "example"
             self.add_questions(section_num, questions, video_id)
             print(f"Indexed {len(questions)} questions from {filename}")
 
-if __name__ == "__main__":
-    # Example usage
-    store = QuestionVectorStore()
+class TranscriptVectorStore:
+    def __init__(self, persist_directory: str = "backend/data/vectorstore"):
+        """Initialize the vector store for YouTube transcripts"""
+        self.persist_directory = persist_directory
+        
+        # Initialize ChromaDB client
+        self.client = chromadb.PersistentClient(path=persist_directory)
+        
+        # Use multilingual sentence-transformers model
+        self.embedding_fn = SentenceTransformerEmbedding()
+        
+        # Initialize translator
+        self.translator = Translator()
+        
+        # Delete existing collection if it exists
+        try:
+            self.client.delete_collection("youtube_transcripts")
+        except Exception:
+            pass
+            
+        # Create collection
+        self.collection = self.client.create_collection(
+            name="youtube_transcripts",
+            embedding_function=self.embedding_fn,
+            metadata={"description": "YouTube video transcripts for listening practice"}
+        )
     
-    # Index questions from files
-    question_files = [
-        ("backend/data/questions/sY7L5cfCWno_section2.txt", 2),
-        ("backend/data/questions/sY7L5cfCWno_section3.txt", 3)
-    ]
-    
-    for filename, section_num in question_files:
-        if os.path.exists(filename):
-            store.index_questions_file(filename, section_num)
-    
-    # Search for similar questions
-    similar = store.search_similar_questions(2, "誕生日について質問", n_results=1)
+    async def _detect_and_translate(self, text: str, target_lang='en') -> tuple[str, str, str]:
+        """Detect language and translate text if needed
+        
+        Args:
+            text: Text to process
+            target_lang: Target language code (default: 'en')
+            
+        Returns:
+            Tuple of (original_text, translated_text, source_language)
+        """
+        try:
+            source_lang = detect(text)
+            if source_lang != target_lang:
+                translated = await self.translator.translate(text, dest=target_lang)
+                return text, translated.text, source_lang
+            return text, text, source_lang
+        except Exception as e:
+            print(f"Translation error: {e}")
+            return text, text, 'unknown'
+
+    async def _chunk_transcript(self, transcript: List[Dict], chunk_size: int = 5, overlap: int = 2) -> List[Dict]:
+        """Split transcript into overlapping chunks for better context
+        
+        Args:
+            transcript: List of transcript entries with 'text' and 'start' fields
+            chunk_size: Number of entries per chunk
+            overlap: Number of overlapping entries between chunks
+            
+        Returns:
+            List of chunks with combined text and metadata
+        """
+        chunks = []
+        for i in range(0, len(transcript), chunk_size - overlap):
+            chunk_entries = transcript[i:i + chunk_size]
+            if len(chunk_entries) < 2:  # Skip very small chunks
+                continue
+                
+            # Combine text and collect metadata
+            text = " ".join(entry['text'] for entry in chunk_entries)
+            start_time = chunk_entries[0]['start']
+            end_time = chunk_entries[-1]['start'] + chunk_entries[-1].get('duration', 0)
+            
+            # Detect language and translate
+            original_text, translated_text, source_lang = await self._detect_and_translate(text)
+            
+            chunks.append({
+                'original_text': original_text,
+                'translated_text': translated_text,
+                'source_language': source_lang,
+                'start_time': start_time,
+                'end_time': end_time,
+                'entries': chunk_entries
+            })
+        
+        return chunks
+
+    async def add_transcript(self, video_id: str, transcript_data: Dict) -> None:
+        """Add a transcript to the vector store
+        
+        Args:
+            video_id: YouTube video ID
+            transcript_data: Transcript data from YouTubeTranscriptDownloader
+        """
+        # Get transcript entries
+        entries = transcript_data['transcript']
+        
+        # Split into chunks with translation
+        chunks = await self._chunk_transcript(entries)
+        
+        # Prepare data for ChromaDB
+        ids = [f"{video_id}_{i}" for i in range(len(chunks))]
+        texts = [chunk['translated_text'] for chunk in chunks]  # Use translated text for matching
+        metadatas = [{
+            'video_id': video_id,
+            'start_time': chunk['start_time'],
+            'end_time': chunk['end_time'],
+            'original_text': chunk['original_text'],
+            'source_language': chunk['source_language']
+        } for chunk in chunks]
+        
+        # Add to collection
+        self.collection.add(
+            ids=ids,
+            documents=texts,
+            metadatas=metadatas
+        )
+
+    async def find_similar(self, query: str, n_results: int = 5) -> List[Dict]:
+        """Find transcript chunks similar to the query
+        
+        Args:
+            query: Search query
+            n_results: Number of results to return
+            
+        Returns:
+            List of similar chunks with metadata
+        """
+        # Translate query if needed
+        _, translated_query, query_lang = await self._detect_and_translate(query)
+        
+        # Search using translated query
+        results = self.collection.query(
+            query_texts=[translated_query],
+            n_results=n_results,
+            include=["documents", "metadatas", "distances"]
+        )
+        
+        # Format results
+        formatted_results = []
+        for i in range(len(results['ids'][0])):
+            metadata = results['metadatas'][0][i]
+            formatted_results.append({
+                'text': metadata['original_text'],  # Return original text
+                'translated_text': results['documents'][0][i],  # Also include translation
+                'metadata': {
+                    'video_id': metadata['video_id'],
+                    'start_time': metadata['start_time'],
+                    'end_time': metadata['end_time'],
+                    'source_language': metadata['source_language']
+                },
+                'similarity': 1 - (results['distances'][0][i] / 2)  # Convert distance to similarity score
+            })
+        
+        return formatted_results
