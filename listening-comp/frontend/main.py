@@ -276,10 +276,18 @@ def render_interactive_stage():
             section_num = 2 if practice_type == "Dialogue Practice" else 3
             try:
                 with st.spinner("Generating question..."):
-                    new_question = st.session_state.question_generator.generate_similar_question(
-                        section_num, topic
+                    # Call backend API to generate question
+                    import requests
+                    response = requests.post(
+                        "http://localhost:8000/api/generate_question",
+                        json={"section_num": section_num, "topic": topic}
                     )
                     
+                    if response.status_code != 200:
+                        st.error(f"Failed to generate question: {response.text}")
+                        return
+                        
+                    new_question = response.json()["question"]
                     if not new_question:
                         st.error("Failed to generate a new question. Please try again.")
                         return

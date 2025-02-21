@@ -2,7 +2,7 @@ import json
 import os
 from typing import Dict, List, Optional
 from transformers import pipeline
-from backend.vector_store import QuestionVectorStore
+from vector_store import QuestionVectorStore
 
 class QuestionGenerator:
     def __init__(self):
