@@ -5,10 +5,16 @@ from typing import Dict, List, Optional
 import uvicorn
 import asyncio
 
-from .chat import Chat
-from .get_transcript import YouTubeTranscriptDownloader
-from .vector_store import TranscriptVectorStore
-from .question_generator import QuestionGenerator
+import sys
+import os
+
+# Add parent directory to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from backend.chat import Chat
+from backend.get_transcript import YouTubeTranscriptDownloader
+from backend.vector_store import TranscriptVectorStore
+from backend.question_generator import QuestionGenerator
 
 app = FastAPI()
 

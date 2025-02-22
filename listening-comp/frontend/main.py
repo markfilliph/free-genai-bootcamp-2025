@@ -3,6 +3,8 @@ import sys
 import os
 import json
 from datetime import datetime
+
+# Add the parent directory to Python path so we can import from backend
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.question_generator import QuestionGenerator
