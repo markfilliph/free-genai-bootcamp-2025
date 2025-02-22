@@ -1,31 +1,70 @@
 import json
 import os
 from typing import Dict, List, Optional
-from transformers import pipeline
+import outlines
+from transformers import AutoTokenizer
 from backend.vector_store import QuestionVectorStore
 
 class QuestionGenerator:
     def __init__(self):
         """Initialize question generator and vector store"""
-        self._generator = None
+        self._model = None  # Will be initialized when needed
+        self._generator = None  # Will be initialized when needed
         self._vector_store = None
         self._initialized = False
         
+        # Define our JSON schema for JLPT questions
+        self._question_schema = {
+            "type": "object",
+            "properties": {
+                "Introduction": {"type": "string"},
+                "Conversation": {"type": "string"},
+                "Question": {"type": "string"},
+                "Options": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 4,
+                    "maxItems": 4
+                },
+                "CorrectAnswer": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4
+                },
+                "Explanation": {"type": "string"}
+            },
+            "required": ["Introduction", "Conversation", "Question", "Options", "CorrectAnswer", "Explanation"]
+        }
+        
     @property
-    def generator(self):
-        """Lazy load the generator model"""
-        if self._generator is None:
+    def model(self):
+        """Lazy load the model"""
+        if self._model is None:
             try:
                 print("Initializing text generation model...")
-                self._generator = pipeline(
-                    'text2text-generation',
-                    model='google/flan-t5-small',
-                    device=-1  # Use CPU
-                )
+                from transformers import AutoModelForCausalLM, AutoTokenizer
+                model_name = "gpt2"  # Using GPT2 which is compatible with AutoModelForCausalLM
+                model = AutoModelForCausalLM.from_pretrained(model_name)
+                tokenizer = AutoTokenizer.from_pretrained(model_name)
+                self._model = outlines.models.transformers(model=model, tokenizer=tokenizer)
                 print("Model initialized successfully")
             except Exception as e:
                 print(f"Error initializing model: {str(e)}")
-                raise RuntimeError(f"Failed to initialize text generation model: {str(e)}")
+                raise RuntimeError(f"Failed to initialize model: {str(e)}")
+        return self._model
+        
+    @property
+    def generator(self):
+        """Lazy load the JSON generator"""
+        if self._generator is None:
+            try:
+                print("Initializing JSON generator...")
+                schema_str = json.dumps(self._question_schema)
+                self._generator = outlines.generate.json(self.model, schema_str)
+                print("Generator initialized successfully")
+            except Exception as e:
+                print(f"Error initializing generator: {str(e)}")
+                raise RuntimeError(f"Failed to initialize generator: {str(e)}")
         return self._generator
     
     @property
@@ -59,93 +98,127 @@ class QuestionGenerator:
                     self._vector_store.add_question(2, q, "Daily Conversation")
         return self._vector_store
 
+    def _try_extract_json(self, text: str) -> Optional[str]:
+        """Try various methods to extract JSON from text"""
+        print(f"Attempting to extract JSON from text:\n{text}\n")
+
+        # Method 1: Try direct parsing
+        try:
+            parsed = json.loads(text)
+            return json.dumps(parsed)
+        except json.JSONDecodeError:
+            print("Direct parsing failed, trying other methods...")
+
+        # Method 2: Find JSON-like structure with balanced braces
+        stack = []
+        start = -1
+        for i, char in enumerate(text):
+            if char == '{':
+                if not stack:  # First opening brace
+                    start = i
+                stack.append(char)
+            elif char == '}':
+                if stack:
+                    stack.pop()
+                    if not stack and start != -1:  # Found a complete JSON object
+                        try:
+                            json_str = text[start:i+1]
+                            parsed = json.loads(json_str)
+                            return json.dumps(parsed)
+                        except json.JSONDecodeError:
+                            continue
+
+        # Method 3: Try to fix common formatting issues
+        try:
+            # Remove any text before first { and after last }
+            start_idx = text.find('{')
+            end_idx = text.rfind('}')
+            if start_idx != -1 and end_idx != -1:
+                text = text[start_idx:end_idx + 1]
+
+            # Fix common issues
+            text = text.replace('\\n', '\n')
+            text = text.replace('\t', ' ')
+            text = text.replace('\"', '"')
+            text = text.replace('\'', '"')
+            text = ' '.join(text.split())  # Normalize whitespace
+
+            parsed = json.loads(text)
+            return json.dumps(parsed)
+        except json.JSONDecodeError:
+            print("All JSON extraction methods failed")
+            return None
+
     def _clean_json_text(self, text: str) -> str:
         """Clean text to extract valid JSON"""
-        # Find the first { and last } to extract JSON object
-        start_idx = text.find('{')
-        end_idx = text.rfind('}')
+        print(f"Raw text to clean: {text}")
         
-        if start_idx == -1 or end_idx == -1:
-            raise ValueError("No JSON object found in text")
+        # Try to extract JSON using various methods
+        result = self._try_extract_json(text)
+        if result is None:
+            raise ValueError("No valid JSON found in text")
             
-        # Extract the potential JSON object
-        json_str = text[start_idx:end_idx + 1]
-        
-        # Fix common JSON formatting issues
-        json_str = json_str.replace('\\n', '\n')  # Fix escaped newlines
-        json_str = json_str.replace('\t', ' ')    # Replace tabs with spaces
-        
-        # Remove any extra whitespace between tokens
-        json_str = ' '.join(json_str.split())
-        
-        # Attempt to parse and re-serialize to ensure valid JSON
-        parsed = json.loads(json_str)
-        return json.dumps(parsed)
+        # Validate the extracted JSON
+        try:
+            parsed = json.loads(result)
+            if not isinstance(parsed, dict):
+                raise ValueError("Extracted JSON is not an object")
+            return json.dumps(parsed)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON structure: {e}")
 
     def _generate_question(self, prompt: str) -> Optional[str]:
-        """Generate a question using local T5 model"""
-        try:
-            print("Initializing generator if needed...")
-            if self._generator is None:
-                self._generator = self.generator
-                print("Generator initialized successfully")
+        """Generate a question using the text generation model.
 
-            # Create a very explicit prompt for JSON generation
-            full_prompt = f"""You are a JLPT question generator API that must output ONLY valid JSON.
-            Generate a question about: {prompt}
-            
-            Your response must be a valid JSON object with exactly these fields:
-            {{
-                "Introduction": "(brief situation context)",
-                "Conversation": "A: (Japanese text)\nB: (Japanese response)",
-                "Question": "(clear English question)",
-                "Options": [
-                    "(correct answer in English)",
-                    "(wrong but plausible answer)",
-                    "(another wrong answer)",
-                    "(another wrong answer)"
-                ],
-                "CorrectAnswer": 1,
-                "Explanation": "(why the correct answer is right)"
-            }}
-            
-            Important:
-            1. Output ONLY the JSON object
-            2. Use real Japanese text appropriate for JLPT
-            3. Make sure the conversation is natural
-            4. Ensure all Japanese has appropriate keigo/politeness
-            5. Make the question challenging but fair
-            """
+        Args:
+            prompt: Prompt to generate question from
+
+        Returns:
+            Generated question text or None if generation failed
+        """
+        try:
+            # Create a prompt that guides the model to generate a JLPT question
+            full_prompt = f"Generate a JLPT question about {prompt}. Use natural Japanese with proper keigo (polite language). Include a brief introduction, a realistic conversation, a clear question, and 4 answer options where only one is correct."
             
             print("Generating text with model...")
-            # Generate multiple attempts and take the best one
-            for attempt in range(3):
-                try:
-                    response = self.generator(
-                        full_prompt,
-                        max_length=512,
-                        num_return_sequences=1,
-                        temperature=0.7
-                    )
-                    
-                    generated_text = response[0]['generated_text'].strip()
-                    print(f"Attempt {attempt + 1} generated text: {generated_text}")
-                    
-                    # Try to clean and validate the JSON
-                    cleaned_json = self._clean_json_text(generated_text)
-                    
-                    # If we got here, we have valid JSON
-                    print(f"Successfully generated valid JSON on attempt {attempt + 1}")
-                    return cleaned_json
-                    
-                except Exception as e:
-                    print(f"Attempt {attempt + 1} failed: {str(e)}")
-                    if attempt == 2:  # Last attempt
-                        raise
+            print(f"Using prompt:\n{full_prompt}\n")
+
+            # Generate with JSON schema constraint
+            result = self.generator(full_prompt)
             
+            # Convert the result to a string
+            return json.dumps(result, ensure_ascii=False)
+
         except Exception as e:
             print(f"Error in _generate_question: {str(e)}")
-            raise Exception(f"Failed to generate question text: {str(e)}")
+            return None
+                    
+    def _validate_question(self, question: Dict) -> Dict:
+        """Validate the generated question"""
+        try:
+            # Validate the question format
+            if 'Introduction' in question:
+                required_fields = ["Introduction", "Conversation", "Question", "Options", "CorrectAnswer", "Explanation"]
+            else:
+                required_fields = ["Situation", "Content", "Question", "Options", "CorrectAnswer", "Explanation"]
+            
+            missing_fields = [field for field in required_fields if field not in question]
+            if missing_fields:
+                raise ValueError(f"Generated question missing required fields: {missing_fields}")
+            
+            if not isinstance(question["Options"], list) or len(question["Options"]) != 4:
+                raise ValueError("Options must be a list of exactly 4 items")
+            
+            if not isinstance(question["CorrectAnswer"], int) or not 1 <= question["CorrectAnswer"] <= 4:
+                raise ValueError("CorrectAnswer must be an integer between 1 and 4")
+            
+            # If we got here, we have valid JSON
+            print("Successfully generated valid JSON")
+            return question
+        
+        except Exception as e:
+            print(f"Error validating question: {str(e)}")
+            raise Exception(f"Failed to validate question: {str(e)}")
 
     def generate_similar_question(self, section_num: int, topic: str) -> Optional[Dict]:
         """Generate a new question similar to existing ones on a given topic"""
@@ -236,22 +309,14 @@ class QuestionGenerator:
                 question = json.loads(response)
                 
                 # Validate the question format
-                if section_num == 2:
-                    required_fields = ["Introduction", "Conversation", "Question", "Options", "CorrectAnswer", "Explanation"]
-                else:
-                    required_fields = ["Situation", "Content", "Question", "Options", "CorrectAnswer", "Explanation"]
-                
-                missing_fields = [field for field in required_fields if field not in question]
-                if missing_fields:
-                    print(f"Generated question missing required fields: {missing_fields}")
-                    raise Exception(f"Generated question missing required fields: {missing_fields}")
+                validated_question = self._validate_question(question)
                 
                 print("Adding question to vector store...")
                 # Add the question to the vector store for future use
-                self.vector_store.add_question(section_num, question, topic)
+                self.vector_store.add_question(section_num, validated_question, topic)
                 
                 print("Question generated and stored successfully")
-                return question
+                return validated_question
                 
             except json.JSONDecodeError as e:
                 print(f"Error parsing generated question JSON: {str(e)}\nResponse was: {response}")
