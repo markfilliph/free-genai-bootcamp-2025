@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.question_generator import QuestionGenerator
 from backend.chat import Chat
+import requests
 
 # Page config
 st.set_page_config(
@@ -105,76 +106,6 @@ def render_interactive_stage():
     st.markdown("- Interactive Question Generation")
     
     # Handle different stages
-    if selected_stage == "Chat with Claude":
-        st.subheader("Chat with Claude")
-        st.write("Ask questions about Japanese language and get instant answers.")
-        
-        # Initialize chat history
-        if 'chat_history' not in st.session_state:
-            st.session_state.chat_history = []
-        
-        # Display chat history
-        for msg in st.session_state.chat_history:
-            if msg['type'] == 'user':
-                st.write(f"🧑 **You:** {msg['content']}")
-            else:
-                st.write(f"🤖 **Assistant:** {msg['content']}")
-        
-        # Text input and send button in the same row
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            # Handle example question selection
-            if 'example_question' in st.session_state:
-                user_input = st.text_input("Ask a question:", value=st.session_state.example_question)
-                # Clear the example question after using it
-                del st.session_state.example_question
-            else:
-                user_input = st.text_input("Ask a question:")
-        
-        with col2:
-            send_pressed = st.button("Send", type="primary")
-        
-        # Handle user input
-        if user_input and send_pressed:
-            # Add user message to chat
-            st.session_state.chat_history.append({"type": "user", "content": user_input})
-            
-            # Generate response based on question type
-            if "train station" in user_input.lower():
-                response = "To ask 'Where is the train station?' in Japanese, you can say: 駅はどこですか？ (eki wa doko desu ka?)\n\nBreaking it down:\n- 駅 (eki) = train station\n- は (wa) = topic marker\n- どこ (doko) = where\n- ですか (desu ka) = polite question marker"
-            elif "は and が" in user_input:
-                response = "は (wa) and が (ga) are both particles but serve different purposes:\n\n1. は marks the topic of the sentence\n2. が marks the subject and shows emphasis\n\nExample:\n- 私は学生です (watashi wa gakusei desu) = As for me, I'm a student\n- 私が学生です (watashi ga gakusei desu) = I (specifically) am the student"
-            elif "食べる" in user_input:
-                response = "The polite form of 食べる (taberu) is 食べます (tabemasu).\n\nOther forms:\n- Plain present: 食べる (taberu)\n- Polite present: 食べます (tabemasu)\n- Super polite: 召し上がります (meshiagarimasu)"
-            elif "count" in user_input.lower():
-                response = "In Japanese, different types of objects use different counter words. Here are some common ones:\n\n1. Small objects (鉛筆1本): ～本 (-hon)\n2. Flat objects (紙1枚): ～枚 (-mai)\n3. Small animals (猫2匹): ～匹 (-hiki)\n4. People (学生3人): ～人 (-nin)"
-            else:
-                response = "I can help you with Japanese language questions! Try asking about grammar, vocabulary, or cultural aspects of Japanese."
-            
-            # Add assistant response to chat
-            st.session_state.chat_history.append({"type": "assistant", "content": response})
-            
-            # Rerun to update chat display
-            st.rerun()
-            
-        # Show example questions at the bottom
-        st.markdown("---")
-        st.subheader("Try These Examples")
-        example_questions = [
-            "How do I say 'Where is the train station?' in Japanese?",
-            "Explain the difference between は and が",
-            "What's the polite form of 食べる?",
-            "How do I count objects in Japanese?"
-        ]
-        
-        # Display examples in two columns
-        col1, col2 = st.columns(2)
-        for i, q in enumerate(example_questions):
-            with col1 if i < len(example_questions)//2 else col2:
-                if st.button(q, key=f"example_{q}"):
-                    st.session_state.example_question = q
-                    st.rerun()
-            
     if selected_stage == "Chat":
         st.subheader("Chat with Japanese Learning Assistant")
         st.write("Ask questions about Japanese language and get helpful responses.")
@@ -277,147 +208,155 @@ def render_interactive_stage():
             try:
                 with st.spinner("Generating question..."):
                     # Call backend API to generate question
-                    import requests
-                    response = requests.post(
-                        "http://localhost:8000/api/generate_question",
-                        json={"section_num": section_num, "topic": topic}
-                    )
-                    
-                    if response.status_code != 200:
-                        st.error(f"Failed to generate question: {response.text}")
+                    try:
+                        response = requests.post(
+                            "http://localhost:8000/api/generate_question",
+                            json={"section_num": section_num, "topic": topic}
+                        )
+                        
+                        if response.status_code != 200:
+                            st.error(f"Failed to generate question: {response.text}")
+                            return
+                            
+                        response_data = response.json()
+                    except requests.RequestException as e:
+                        st.error(f"Error connecting to the backend service: {str(e)}")
+                        return
+                    if not response_data or 'question' not in response_data:
+                        st.error("Invalid response from server")
+                        return
+                            
+                    new_question = response_data["question"]
+                    if not isinstance(new_question, dict):
+                        st.error("Invalid question format received")
+                        return
+                            
+                    # Validate required fields
+                    required_fields = ['Question', 'Options', 'CorrectAnswer']
+                    if not all(field in new_question for field in required_fields):
+                        st.error("Question is missing required fields")
                         return
                         
-                    new_question = response.json()["question"]
-                    if not new_question:
-                        st.error("Failed to generate a new question. Please try again.")
-                        return
-                    
                     st.session_state.current_question = new_question
                     st.session_state.current_practice_type = practice_type
                     st.session_state.current_topic = topic
                     st.session_state.feedback = None
-                    
+                        
                     # Save the generated question
                     save_question(new_question, practice_type, topic)
             except Exception as e:
                 st.error(f"Error generating question: {str(e)}. Please try again.")
                 return
         
-        # Display current question if available
-        if 'current_question' in st.session_state:
-            question = st.session_state.current_question
-            
-            try:
-                # Display in tabs
-                question_tab, scenario_tab, answer_tab = st.tabs(["Question", "Scenario", "Answer"])
-                
-                with question_tab:
-                    st.write(question.get('Question', 'No question available'))
-                    options = question.get('Options', [])
-                    for i, option in enumerate(options, 1):
-                        st.write(f"{i}. {option}")
-                
-                with scenario_tab:
-                    if section_num == 2:
-                        st.write(f"**Introduction:** {question.get('Introduction', '')}")
-                        st.write(f"**Conversation:**\n{question.get('Conversation', '')}")
-                    else:
-                        st.write(f"**Situation:** {question.get('Situation', '')}")
-                        if 'Content' in question:
-                            st.write(f"**Content:**\n{question['Content']}")
-                
-                with answer_tab:
-                    options = question.get('Options', [])
-                    correct_answer_idx = question.get('CorrectAnswer', 1) - 1
-                    if 0 <= correct_answer_idx < len(options):
-                        st.write(f"**Correct Answer:** {options[correct_answer_idx]}")
-                    if 'Explanation' in question:
-                        st.write(f"**Explanation:** {question['Explanation']}")
-            except Exception as e:
-                st.error(f"Error displaying question: {str(e)}")
+
     
     # Display debug information expandable section
     with st.expander("Debug Information"):
         st.json({
             "Current Stage": st.session_state.current_stage,
-            "Practice Type": practice_type,
-            "Topic": topic,
+            "Practice Type": st.session_state.get('current_practice_type', 'Not Selected'),
+            "Topic": st.session_state.get('current_topic', 'Not Selected'),
             "Has Question": st.session_state.current_question is not None
         })
     
-    if st.session_state.current_question:
+    if hasattr(st.session_state, 'current_question') and st.session_state.current_question:
         st.markdown("---")
         st.subheader("Practice Question")
         
         # Create tabs for different parts of the question
         scenario_tab, question_tab, answer_tab = st.tabs(["Scenario", "Question", "Answer"])
         
+        # Get the current question safely
+        question = st.session_state.current_question
+        
         with scenario_tab:
             if practice_type == "Dialogue Practice":
                 st.write("**Introduction:**")
-                st.info(st.session_state.current_question['Introduction'])
+                st.info(question.get('Introduction', 'No introduction available'))
                 st.write("**Conversation:**")
-                st.info(st.session_state.current_question['Conversation'])
+                st.info(question.get('Conversation', 'No conversation available'))
             else:
                 st.write("**Situation:**")
-                st.info(st.session_state.current_question['Situation'])
+                st.info(question.get('Situation', 'No situation available'))
+                if 'Content' in question:
+                    st.write("**Content:**")
+                    st.info(question['Content'])
         
         with question_tab:
             st.write("**Question:**")
-            st.info(st.session_state.current_question['Question'])
+            st.info(question.get('Question', 'No question available'))
             
             # Display options
-            options = st.session_state.current_question['Options']
+            options = question.get('Options', [])
+            if not options:
+                st.warning("No options available for this question")
+                return
             
             # If we have feedback, show which answers were correct/incorrect
-            if st.session_state.feedback:
-                correct = st.session_state.feedback.get('correct', False)
-                correct_answer = st.session_state.feedback.get('correct_answer', 1) - 1
-                selected_index = st.session_state.selected_answer - 1 if hasattr(st.session_state, 'selected_answer') else -1
-                
-                st.write("\n**Your Answer:**")
-                for i, option in enumerate(options):
-                    if i == correct_answer and i == selected_index:
-                        st.success(f"{i+1}. {option} ✓ (Correct!)")
-                    elif i == correct_answer:
-                        st.success(f"{i+1}. {option} ✓ (This was the correct answer)")
-                    elif i == selected_index:
-                        st.error(f"{i+1}. {option} ✗ (Your answer)")
-                    else:
-                        st.write(f"{i+1}. {option}")
+            if hasattr(st.session_state, 'feedback') and st.session_state.feedback:
+                try:
+                    correct = st.session_state.feedback.get('correct', False)
+                    correct_answer = question.get('CorrectAnswer', 1) - 1
+                    selected_index = st.session_state.selected_answer - 1 if hasattr(st.session_state, 'selected_answer') else -1
+                    
+                    st.write("\n**Your Answer:**")
+                    for i, option in enumerate(options):
+                        if i == correct_answer and i == selected_index:
+                            st.success(f"{i+1}. {option} ✓ (Correct!)")
+                        elif i == correct_answer:
+                            st.success(f"{i+1}. {option} ✓ (This was the correct answer)")
+                        elif i == selected_index:
+                            st.error(f"{i+1}. {option} ✗ (Your answer)")
+                        else:
+                            st.write(f"{i+1}. {option}")
+                except Exception as e:
+                    st.error(f"Error displaying feedback: {str(e)}")
+                    st.session_state.feedback = None
             else:
                 # Display options as radio buttons when no feedback yet
-                selected = st.radio(
-                    "Choose your answer:",
-                    options,
-                    index=None,
-                    format_func=lambda x: f"{options.index(x) + 1}. {x}"
-                )
-                
-                # Submit answer button
-                if selected and st.button("Submit Answer", type="primary"):
-                    selected_index = options.index(selected) + 1
-                    st.session_state.selected_answer = selected_index
-                    st.session_state.feedback = st.session_state.question_generator.get_feedback(
-                        st.session_state.current_question,
-                        selected_index
+                try:
+                    selected = st.radio(
+                        "Choose your answer:",
+                        options,
+                        index=None,
+                        format_func=lambda x: f"{options.index(x) + 1}. {x}"
                     )
-                    st.rerun()
+                    
+                    # Submit answer button
+                    if selected and st.button("Submit Answer", type="primary"):
+                        selected_index = options.index(selected) + 1
+                        st.session_state.selected_answer = selected_index
+                        
+                        # Create feedback dictionary
+                        correct_answer = question.get('CorrectAnswer', 1)
+                        is_correct = selected_index == correct_answer
+                        
+                        st.session_state.feedback = {
+                            'correct': is_correct,
+                            'explanation': question.get('Explanation', 'No explanation available')
+                        }
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error handling answer submission: {str(e)}")
         
         with answer_tab:
-            if st.session_state.feedback:
-                # Show explanation
-                st.write("**Explanation:**")
-                explanation = st.session_state.feedback.get('explanation', 'No feedback available')
-                if st.session_state.feedback.get('correct', False):
-                    st.success(explanation)
-                else:
-                    st.error(explanation)
-                
-                # Add button to try new question
-                if st.button("Try Another Question", type="primary"):
+            if hasattr(st.session_state, 'feedback') and st.session_state.feedback:
+                try:
+                    # Show explanation
+                    st.write("**Explanation:**")
+                    explanation = st.session_state.feedback.get('explanation', 'No explanation available')
+                    if st.session_state.feedback.get('correct', False):
+                        st.success(explanation)
+                    else:
+                        st.error(explanation)
+                    
+                    # Add button to try new question
+                    if st.button("Try Another Question", type="primary"):
+                        st.session_state.feedback = None
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error displaying explanation: {str(e)}")
                     st.session_state.feedback = None
-                    st.rerun()
             else:
                 st.info("Submit your answer in the Question tab to see the explanation.")
     else:

@@ -15,11 +15,17 @@ class QuestionGenerator:
     def generator(self):
         """Lazy load the generator model"""
         if self._generator is None:
-            self._generator = pipeline(
-                'text2text-generation',
-                model='google/flan-t5-small',
-                device=-1  # Use CPU
-            )
+            try:
+                print("Initializing text generation model...")
+                self._generator = pipeline(
+                    'text2text-generation',
+                    model='google/flan-t5-small',
+                    device=-1  # Use CPU
+                )
+                print("Model initialized successfully")
+            except Exception as e:
+                print(f"Error initializing model: {str(e)}")
+                raise RuntimeError(f"Failed to initialize text generation model: {str(e)}")
         return self._generator
     
     @property
@@ -94,122 +100,57 @@ class QuestionGenerator:
                         "Situation": "At a train station",
                         "Content": "電車は10分遅れています。",
                         "Question": "What is the announcement about?",
-                        "Options": ["The train is 10 minutes late", "The train is arriving", "The train is cancelled", "The train is full"],
+                        "Options": ["The train is 10 minutes late", "The train is arriving", "The train is cancelled", "The train is on time"],
                         "CorrectAnswer": 1,
-                        "Explanation": "The announcement says '電車は10分遅れています' which means 'The train is 10 minutes late.'"
+                        "Explanation": "The announcement '電車は10分遅れています' means 'The train is 10 minutes late.'"
                     }
             
-            # Use the most similar question as a template
-            template = similar_questions[0]
+            # Use similar questions as context for generating new question
+            context = json.dumps(similar_questions, indent=2, ensure_ascii=False)
             
-            # Create a new question based on the template
-            if section_num == 2:
-                question = {
-                    "Introduction": template.get("Introduction", ""),
-                    "Conversation": template.get("Conversation", ""),
-                    "Question": template.get("Question", ""),
-                    "Options": template.get("Options", []),
-                    "CorrectAnswer": template.get("CorrectAnswer", 1),
-                    "Explanation": template.get("Explanation", "")
-                }
-            else:
-                question = {
-                    "Situation": template.get("Situation", ""),
-                    "Content": template.get("Content", ""),
-                    "Question": template.get("Question", ""),
-                    "Options": template.get("Options", []),
-                    "CorrectAnswer": template.get("CorrectAnswer", 1),
-                    "Explanation": template.get("Explanation", "")
-                }
+            # Create prompt for generating new question
+            prompt = f"""Based on the following example JLPT listening questions, create a new question about {topic}.
+            The question should follow the same format but be different from the examples.
+            Make sure the question tests listening comprehension and has a clear correct answer.
             
-            # Add the question to the vector store for future use
-            self.vector_store.add_question(section_num, question, topic)
+            Example Questions:
+            {context}
             
-            return question
+            Generate a new question following the exact same format as above. Include all components (Introduction/Situation, 
+            Conversation/Question, and Options). Make sure the question is challenging but fair, and the options are plausible 
+            but with only one clearly correct answer.
+            """
+
+            # Generate new question using the model
+            response = self._generate_question(prompt)
+            if not response:
+                return None
+
+            try:
+                # Parse the generated response into a question dict
+                question = json.loads(response)
+                
+                # Validate the question format
+                if section_num == 2:
+                    required_fields = ["Introduction", "Conversation", "Question", "Options", "CorrectAnswer", "Explanation"]
+                else:
+                    required_fields = ["Situation", "Content", "Question", "Options", "CorrectAnswer", "Explanation"]
+                
+                if not all(field in question for field in required_fields):
+                    print(f"Generated question missing required fields: {required_fields}")
+                    return None
+                
+                # Add the question to the vector store for future use
+                self.vector_store.add_question(section_num, question, topic)
+                
+                return question
+            except json.JSONDecodeError as e:
+                print(f"Error parsing generated question: {str(e)}")
+                return None
             
         except Exception as e:
             print(f"Error generating question: {str(e)}")
             return None
-
-
-        # Create prompt for generating new question
-        prompt = f"""Based on the following example JLPT listening questions, create a new question about {topic}.
-        The question should follow the same format but be different from the examples.
-        Make sure the question tests listening comprehension and has a clear correct answer.
-        
-        {context}
-        
-        Generate a new question following the exact same format as above. Include all components (Introduction/Situation, 
-        Conversation/Question, and Options). Make sure the question is challenging but fair, and the options are plausible 
-        but with only one clearly correct answer. Return ONLY the question without any additional text.
-        
-        New Question:
-        """
-
-        # Generate new question
-        response = self._generate_question(prompt)
-        if not response:
-            return None
-
-        # Parse the generated question
-        try:
-            lines = response.strip().split('\n')
-            question = {}
-            current_key = None
-            current_value = []
-            
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                    
-                if line.startswith("Introduction:"):
-                    if current_key:
-                        question[current_key] = ' '.join(current_value)
-                    current_key = 'Introduction'
-                    current_value = [line.replace("Introduction:", "").strip()]
-                elif line.startswith("Conversation:"):
-                    if current_key:
-                        question[current_key] = ' '.join(current_value)
-                    current_key = 'Conversation'
-                    current_value = [line.replace("Conversation:", "").strip()]
-                elif line.startswith("Situation:"):
-                    if current_key:
-                        question[current_key] = ' '.join(current_value)
-                    current_key = 'Situation'
-                    current_value = [line.replace("Situation:", "").strip()]
-                elif line.startswith("Question:"):
-                    if current_key:
-                        question[current_key] = ' '.join(current_value)
-                    current_key = 'Question'
-                    current_value = [line.replace("Question:", "").strip()]
-                elif line.startswith("Options:"):
-                    if current_key:
-                        question[current_key] = ' '.join(current_value)
-                    current_key = 'Options'
-                    current_value = []
-                elif line[0].isdigit() and line[1] == "." and current_key == 'Options':
-                    current_value.append(line[2:].strip())
-                elif current_key:
-                    current_value.append(line)
-            
-            if current_key:
-                if current_key == 'Options':
-                    question[current_key] = current_value
-                else:
-                    question[current_key] = ' '.join(current_value)
-            
-            # Ensure we have exactly 4 options
-            if 'Options' not in question or len(question.get('Options', [])) != 4:
-                # Use default options if we don't have exactly 4
-                question['Options'] = [
-                    "ピザを食べる",
-                    "ハンバーガーを食べる",
-                    "サラダを食べる",
-                    "パスタを食べる"
-                ]
-            
-            return question
         except Exception as e:
             print(f"Error parsing generated question: {str(e)}")
             return None

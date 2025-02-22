@@ -54,20 +54,6 @@ class QuestionVectorStore:
             pass
 
         # Create collections with embedding function
-        self.section2_collection = self.client.create_collection(
-            name="section2_questions",
-            embedding_function=self.embedding_fn
-        )
-
-        self.section3_collection = self.client.create_collection(
-            name="section3_questions",
-            embedding_function=self.embedding_fn
-        )
-
-        # Load and add example questions
-        self._load_example_questions()
-
-        # Create new collections
         self.collections = {
             "section2": self.client.create_collection(
                 name="section2_questions",
@@ -80,6 +66,9 @@ class QuestionVectorStore:
                 metadata={"description": "JLPT listening comprehension questions - Section 3"}
             )
         }
+
+        # Load and add example questions
+        self._load_example_questions()
 
     def add_question(self, section_num: int, question: Dict, topic: str) -> None:
         """Add a question to the vector store

@@ -5,10 +5,10 @@ from typing import Dict, List, Optional
 import uvicorn
 import asyncio
 
-from chat import Chat
-from get_transcript import YouTubeTranscriptDownloader
-from vector_store import TranscriptVectorStore
-from question_generator import QuestionGenerator
+from .chat import Chat
+from .get_transcript import YouTubeTranscriptDownloader
+from .vector_store import TranscriptVectorStore
+from .question_generator import QuestionGenerator
 
 app = FastAPI()
 
