@@ -224,18 +224,18 @@ class TranscriptVectorStore:
         # Initialize translator
         self.translator = Translator()
         
-        # Delete existing collection if it exists
+        # Get or create collection
         try:
-            self.client.delete_collection("youtube_transcripts")
+            self.collection = self.client.get_collection(
+                name="youtube_transcripts",
+                embedding_function=self.embedding_fn
+            )
         except Exception:
-            pass
-            
-        # Create collection
-        self.collection = self.client.create_collection(
-            name="youtube_transcripts",
-            embedding_function=self.embedding_fn,
-            metadata={"description": "YouTube video transcripts for listening practice"}
-        )
+            self.collection = self.client.create_collection(
+                name="youtube_transcripts",
+                embedding_function=self.embedding_fn,
+                metadata={"description": "YouTube video transcripts for listening practice"}
+            )
     
     async def _detect_and_translate(self, text: str, target_lang='en') -> tuple[str, str, str]:
         """Detect language and translate text if needed
@@ -324,11 +324,12 @@ class TranscriptVectorStore:
             metadatas=metadatas
         )
 
-    async def find_similar(self, query: str, n_results: int = 5) -> List[Dict]:
+    async def find_similar(self, query: str, video_id: str = None, n_results: int = 5) -> List[Dict]:
         """Find transcript chunks similar to the query
         
         Args:
             query: Search query
+            video_id: Optional video ID to filter results
             n_results: Number of results to return
             
         Returns:
@@ -337,27 +338,41 @@ class TranscriptVectorStore:
         # Translate query if needed
         _, translated_query, query_lang = await self._detect_and_translate(query)
         
+        # Prepare where clause if video_id is provided
+        where = {"video_id": video_id} if video_id else None
+        
         # Search using translated query
         results = self.collection.query(
             query_texts=[translated_query],
+            where=where,
             n_results=n_results,
             include=["documents", "metadatas", "distances"]
         )
         
         # Format results
         formatted_results = []
-        for i in range(len(results['ids'][0])):
-            metadata = results['metadatas'][0][i]
-            formatted_results.append({
-                'text': metadata['original_text'],  # Return original text
-                'translated_text': results['documents'][0][i],  # Also include translation
-                'metadata': {
-                    'video_id': metadata['video_id'],
-                    'start_time': metadata['start_time'],
-                    'end_time': metadata['end_time'],
-                    'source_language': metadata['source_language']
-                },
-                'similarity': 1 - (results['distances'][0][i] / 2)  # Convert distance to similarity score
-            })
+        if len(results['ids'][0]) > 0:
+            # Find min and max distances for normalization
+            distances = results['distances'][0]
+            min_dist = min(distances)
+            max_dist = max(distances)
+            dist_range = max_dist - min_dist if max_dist > min_dist else 1
+            
+            for i in range(len(results['ids'][0])):
+                metadata = results['metadatas'][0][i]
+                # Normalize distance to [0, 1] range and invert (closer = higher score)
+                similarity = 1 - ((distances[i] - min_dist) / dist_range)
+                
+                formatted_results.append({
+                    'text': metadata['original_text'],  # Return original text
+                    'translated_text': results['documents'][0][i],  # Also include translation
+                    'metadata': {
+                        'video_id': metadata['video_id'],
+                        'start_time': metadata['start_time'],
+                        'end_time': metadata['end_time'],
+                        'source_language': metadata['source_language']
+                    },
+                    'similarity': similarity  # Normalized similarity score
+                })
         
         return formatted_results

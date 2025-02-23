@@ -42,6 +42,7 @@ class ChatRequest(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str
+    video_id: str
     n_results: Optional[int] = 5
 
 class QuestionRequest(BaseModel):
@@ -50,7 +51,7 @@ class QuestionRequest(BaseModel):
 
 @app.post("/api/transcript")
 async def get_transcript(request: TranscriptRequest):
-    """Get transcript for a YouTube video and add it to vector store"""
+    """Get transcript for a YouTube video"""
     try:
         transcript_data = await transcript_downloader.get_transcript(request.video_url)
         if not transcript_data:
@@ -60,7 +61,26 @@ async def get_transcript(request: TranscriptRequest):
         video_id = transcript_data['video_id']
         await vector_store.add_transcript(video_id, transcript_data)
         
-        return {"status": "success", "video_id": video_id}
+        # Combine transcript entries into a single text
+        full_transcript = ""
+        for entry in transcript_data['transcript']:
+            full_transcript += entry['text'] + "\n"
+            
+        # Count statistics
+        total_chars = len(full_transcript)
+        japanese_chars = sum(1 for c in full_transcript if ord(c) > 0x3040 and ord(c) < 0x30FF)
+        total_lines = len(transcript_data['transcript'])
+        
+        return {
+            "status": "success", 
+            "video_id": video_id,
+            "transcript": full_transcript,
+            "stats": {
+                "total_chars": total_chars,
+                "japanese_chars": japanese_chars,
+                "total_lines": total_lines
+            }
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -68,7 +88,11 @@ async def get_transcript(request: TranscriptRequest):
 async def search_transcript(request: SearchRequest):
     """Search for similar transcript segments"""
     try:
-        results = await vector_store.find_similar(request.query, request.n_results)
+        results = await vector_store.find_similar(
+            query=request.query,
+            video_id=request.video_id,
+            n_results=request.n_results
+        )
         return {"results": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

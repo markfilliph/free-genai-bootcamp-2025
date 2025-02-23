@@ -75,18 +75,22 @@ def render_interactive_stage():
     if 'current_topic' not in st.session_state:
         st.session_state.current_topic = None
     if 'current_stage' not in st.session_state:
-        st.session_state.current_stage = "Chat"
+        st.session_state.current_stage = "Transcript"
+    if 'transcript_data' not in st.session_state:
+        st.session_state.transcript_data = None
+    if 'video_id' not in st.session_state:
+        st.session_state.video_id = None
         
     # Create sidebar with development stages
     with st.sidebar:
         st.subheader("Development Stages")
         # Reset current_stage if it's an old value
-        if st.session_state.current_stage not in ["Chat", "Question Generation", "Interactive Learning"]:
-            st.session_state.current_stage = "Chat"
+        if st.session_state.current_stage not in ["Transcript", "Chat", "Question Generation", "Interactive Learning"]:
+            st.session_state.current_stage = "Transcript"
         
         selected_stage = st.radio(
             "Select Stage:",
-            ["Chat", "Question Generation", "Interactive Learning"],
+            ["Transcript", "Chat", "Question Generation", "Interactive Learning"],
             key="current_stage"
         )
         
@@ -109,7 +113,63 @@ def render_interactive_stage():
     st.markdown("- YouTube Transcript Processing")
     
     # Handle different stages
-    if selected_stage == "Chat":
+    if selected_stage == "Transcript":
+        st.header("YouTube Transcript", divider="rainbow")
+        
+        # Input for YouTube URL
+        youtube_url = st.text_input(
+            "Enter YouTube URL",
+            placeholder="https://www.youtube.com/watch?v=...",
+            help="Enter the URL of a Japanese YouTube video to get its transcript"
+        )
+        
+        # Fetch transcript button
+        if youtube_url and st.button("Fetch Transcript"):
+            with st.spinner("Fetching transcript..."):
+                try:
+                    # Call backend API
+                    response = requests.post(
+                        "http://localhost:8000/api/transcript",
+                        json={"video_url": youtube_url}
+                    )
+                    response.raise_for_status()
+                    
+                    response_data = response.json()
+                    
+                    # Store transcript data
+                    st.session_state.transcript = response_data["transcript"]
+                    st.session_state.stats = response_data["stats"]
+                    st.success("Transcript fetched successfully!")
+                    
+                except Exception as e:
+                    st.error(f"Error fetching transcript: {str(e)}")
+        
+        # Display transcript and stats if available
+        if hasattr(st.session_state, 'transcript'):
+            # Create two columns
+            col1, col2 = st.columns([1, 2])
+            
+            # Stats in the first column
+            with col1:
+                st.subheader("Transcript Statistics")
+                stats = st.session_state.stats
+                st.markdown(f"**Total Characters:** {stats['total_chars']:,}")
+                st.markdown(f"**Japanese Characters:** {stats['japanese_chars']:,}")
+                jp_char_percent = (stats['japanese_chars'] / stats['total_chars'] * 100) if stats['total_chars'] > 0 else 0
+                st.markdown(f"**Japanese Ratio:** {jp_char_percent:.1f}%")
+                st.markdown(f"**Total Lines:** {stats['total_lines']:,}")
+            
+            # Full transcript in the second column
+            with col2:
+                st.subheader("Full Transcript")
+                st.text_area(
+                    "Raw Transcript",
+                    value=st.session_state.transcript,
+                    height=400,
+                    disabled=True
+                )
+    
+    elif selected_stage == "Chat":
         st.subheader("Chat with Japanese Learning Assistant")
         st.write("Ask questions about Japanese language and get helpful responses.")
         
