@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from typing import Dict, List, Optional
 import outlines
 from transformers import AutoTokenizer
@@ -42,11 +43,24 @@ class QuestionGenerator:
         if self._model is None:
             try:
                 print("Initializing text generation model...")
-                from transformers import AutoModelForCausalLM, AutoTokenizer
-                model_name = "gpt2"  # Using GPT2 which is compatible with AutoModelForCausalLM
-                model = AutoModelForCausalLM.from_pretrained(model_name)
-                tokenizer = AutoTokenizer.from_pretrained(model_name)
-                self._model = outlines.models.transformers(model=model, tokenizer=tokenizer)
+                from text_generation import Client
+                
+                # Get API token from environment variable
+                api_token = os.getenv('HUGGINGFACE_API_TOKEN')
+                if not api_token:
+                    raise ValueError('HUGGINGFACE_API_TOKEN environment variable not set')
+                
+                # Initialize TGI client with API token
+                headers = {"Authorization": f"Bearer {api_token}"}
+                endpoint = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+                client = Client(
+                    endpoint,
+                    headers=headers,
+                    timeout=120  # Overall timeout
+                )
+                
+                # Create text generation model with direct client
+                self._model = client
                 print("Model initialized successfully")
             except Exception as e:
                 print(f"Error initializing model: {str(e)}")
@@ -55,10 +69,11 @@ class QuestionGenerator:
         
     @property
     def generator(self):
-        """Lazy load the JSON generator"""
+        """Lazy load the text generation model"""
         if self._generator is None:
             try:
-                print("Initializing JSON generator...")
+                print("Initializing text generator...")
+                # Create a structured generator with our schema
                 schema_str = json.dumps(self._question_schema)
                 self._generator = outlines.generate.json(self.model, schema_str)
                 print("Generator initialized successfully")
@@ -177,17 +192,78 @@ class QuestionGenerator:
             Generated question text or None if generation failed
         """
         try:
-            # Create a prompt that guides the model to generate a JLPT question
-            full_prompt = f"Generate a JLPT question about {prompt}. Use natural Japanese with proper keigo (polite language). Include a brief introduction, a realistic conversation, a clear question, and 4 answer options where only one is correct."
+            # Format prompt for Mistral
+            template = '''<s>[INST] You are a JLPT question generator. Generate a JLPT question about {topic}. Use natural Japanese with proper keigo (polite language). Include a brief introduction, a realistic conversation, a clear question, and 4 answer options where only one is correct. Return ONLY valid JSON in this exact format:
+            {{
+                "Introduction": "Brief context like At a restaurant",
+                "Conversation": "A: Japanese dialogue here\nB: Response in Japanese here",
+                "Question": "Clear question in English about the dialogue",
+                "Options": ["Correct answer", "Wrong but plausible answer", "Another wrong answer", "Another wrong answer"],
+                "CorrectAnswer": 1,
+                "Explanation": "Clear explanation of why the correct answer is right"
+            }}
+            [/INST]\n'''
+            full_prompt = template.format(topic=prompt)
             
             print("Generating text with model...")
             print(f"Using prompt:\n{full_prompt}\n")
 
-            # Generate with JSON schema constraint
-            result = self.generator(full_prompt)
+            # Generate with TGI client with retries
+            max_retries = 3
+            retry_delay = 2  # seconds
             
-            # Convert the result to a string
-            return json.dumps(result, ensure_ascii=False)
+            for attempt in range(max_retries):
+                try:
+                    print(f"Attempt {attempt + 1} of {max_retries}...")
+                    # Try different generation parameters on each retry
+                    if attempt == 0:
+                        params = {
+                            "max_new_tokens": 1024,
+                            "temperature": 0.7,
+                            "top_p": 0.95
+                        }
+                    elif attempt == 1:
+                        params = {
+                            "max_new_tokens": 1024,
+                            "temperature": 0.8,
+                            "top_k": 50
+                        }
+                    else:
+                        params = {
+                            "max_new_tokens": 1024,
+                            "temperature": 0.9,
+                            "top_p": 0.99
+                        }
+                    
+                    response = self.model.generate(full_prompt, **params)
+                    if not response or not response.generated_text:
+                        raise ValueError("Empty response from model")
+                    
+                    result = response.generated_text
+                    break
+                except Exception as e:
+                    print(f"Error on attempt {attempt + 1}: {str(e)}")
+                    if attempt < max_retries - 1:
+                        print(f"Retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        raise RuntimeError(f"Failed after {max_retries} attempts: {str(e)}")
+            
+            # Clean up the response
+            result = result.strip()
+            if result.startswith('```json'):
+                result = result[7:]
+            if result.endswith('```'):
+                result = result[:-3]
+            
+            # Try to parse and re-serialize to ensure valid JSON
+            try:
+                parsed = json.loads(result)
+                return json.dumps(parsed, ensure_ascii=False)
+            except json.JSONDecodeError:
+                # If parsing fails, return the cleaned string for further processing
+                return result
 
         except Exception as e:
             print(f"Error in _generate_question: {str(e)}")

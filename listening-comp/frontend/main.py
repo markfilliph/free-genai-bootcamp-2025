@@ -102,10 +102,11 @@ def render_interactive_stage():
     st.caption("Transform YouTube transcripts into interactive Japanese learning experiences.")
     
     st.markdown("This tool demonstrates:")
-    st.markdown("- Local LLM Integration (google/flan-t5-small)")
-    st.markdown("- Vector Search with ChromaDB")
-    st.markdown("- Sentence Transformers (all-MiniLM-L6-v2)")
-    st.markdown("- Interactive Question Generation")
+    st.markdown("- Hugging Face Integration (Mistral-7B-Instruct-v0.2)")
+    st.markdown("- Vector Search with ChromaDB and Sentence Transformers")
+    st.markdown("- Multilingual Support with paraphrase-multilingual-mpnet-base-v2")
+    st.markdown("- Interactive Japanese Question Generation")
+    st.markdown("- YouTube Transcript Processing")
     
     # Handle different stages
     if selected_stage == "Chat":
