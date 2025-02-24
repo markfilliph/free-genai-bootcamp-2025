@@ -61,17 +61,20 @@ def setup_state():
     st.title("Japanese Learning App")
     
     if st.button("Generate Sentence"):
-        # Randomly select a word from vocabulary
         if st.session_state.vocabulary:
-            word = random.choice(st.session_state.vocabulary)  # Random selection instead of [0]
+            word = random.choice(st.session_state.vocabulary)
             st.session_state.current_sentence = generate_sentence(word['english'])
             st.session_state.current_state = AppStates.PRACTICE
+            # Add this to force a rerun after state change
+            st.rerun()
         else:
             st.error("No vocabulary available. Please check if the API server is running.")
 
 def practice_state():
     st.title("Practice Writing")
-    st.write(st.session_state.current_sentence)
+    # Debug info
+    st.write("Current State:", st.session_state.current_state)
+    st.write("Current Sentence:", st.session_state.current_sentence)
     
     uploaded_file = st.file_uploader("Upload your written answer", type=['png', 'jpg', 'jpeg'])
     
@@ -79,6 +82,7 @@ def practice_state():
         image = Image.open(uploaded_file)
         st.session_state.current_grade = grade_submission(image)
         st.session_state.current_state = AppStates.REVIEW
+        st.rerun()
 
 def review_state():
     st.title("Review")
