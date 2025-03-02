@@ -1,0 +1,13 @@
+# Current Dependencies Status:
+# ✅ fastapi, uvicorn: Core API dependencies - Working
+# ❌ vllm: Removed due to GPU requirement
+# ⚠️ torch: Added CPU support
+# ⚠️ transformers: Replacement for vllm
+# ⚠️ bitsandbytes: Added for 8-bit quantization
+
+fastapi>=0.68.0
+uvicorn>=0.15.0
+torch>=2.0.0
+transformers>=4.30.0
+pydantic>=1.8.2
+bitsandbytes>=0.41.1

@@ -1,0 +1,200 @@
+# Service Status Overview:
+# ✅ tei-embedding-service: Running and healthy
+# ✅ retriever-service: Running (health check in progress)
+# ✅ tei-reranking-service: Running (health check in progress)
+# ✅ redis-vector-db: Running
+# ❌ vllm-service: Failed - Device type inference error
+# ❌ megaservice: Unhealthy - Dependency issues
+# ⚠️ gpt-sovits-service: Container config issues
+
+networks:
+  megaservice_network:
+    driver: bridge
+
+services:
+  redis-vector-db:
+    image: redis:latest
+    container_name: redis-vector-db
+    ports:
+      - "6379:6379"
+    networks:
+      - megaservice_network
+    restart: always
+
+  tei-embedding-service:
+    build:
+      context: ./services/tei-embedding
+      dockerfile: Dockerfile
+    container_name: tei-embedding-service
+    ports:
+      - "8080:8080"
+    networks:
+      - megaservice_network
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 6s
+      retries: 18
+
+  retriever:
+    build:
+      context: ./services/retriever
+      dockerfile: Dockerfile
+    container_name: retriever-service
+    ports:
+      - "8081:8081"
+    networks:
+      - megaservice_network
+    depends_on:
+      - redis-vector-db
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 6s
+      retries: 18
+
+  tei-reranking-service:
+    build:
+      context: ./services/tei-reranking
+      dockerfile: Dockerfile
+    container_name: tei-reranking-service
+    ports:
+      - "8082:8082"
+    networks:
+      - megaservice_network
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 6s
+      retries: 18
+
+  vllm-service:
+    build:
+      context: ./services/vllm
+      dockerfile: Dockerfile
+    container_name: vllm-service
+    ports:
+      - "9009:80"
+    networks:
+      - megaservice_network
+    environment:
+      - HF_TOKEN=${HUGGINGFACEHUB_API_TOKEN}
+      - LLM_MODEL_ID=TinyLlama/TinyLlama-1.1B-Chat-v1.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 6s
+      retries: 18
+    restart: always
+
+  megaservice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: megaservice
+    networks:
+      - megaservice_network
+    depends_on:
+      redis-vector-db:
+        condition: service_started
+      tei-embedding-service:
+        condition: service_healthy
+      retriever:
+        condition: service_healthy
+      tei-reranking-service:
+        condition: service_healthy
+      vllm-service:
+        condition: service_healthy
+    ports:
+      - "8888:8888"
+    ipc: host
+    restart: always
+  #speecht5-service:
+  #  image: ${REGISTRY:-opea}/speecht5:${TAG:-latest}
+  #  container_name: speecht5-service
+  #  ports:
+  #    - ${SPEECHT5_PORT:-7055}:7055
+  #  ipc: host
+  #  environment:
+  #    no_proxy: ${no_proxy}
+  #    http_proxy: ${http_proxy}
+  #    https_proxy: ${https_proxy}
+  #  restart: unless-stopped
+  #  healthcheck:
+  #    test: ["CMD", "curl", "-f", "http://localhost:7055/health"]
+  #    interval: 10s
+  #    timeout: 6s
+  #    retries: 18
+  #tts-speecht5:
+  #  image: ${REGISTRY:-opea}/tts:${TAG:-latest}
+  #  container_name: tts-speecht5-service
+  #  ports:
+  #    - ${TTS_PORT:-9088}:9088
+  #  ipc: host
+  #  environment:
+  #    TTS_ENDPOINT: http://172.24.230.22:7055
+  #    TTS_COMPONENT_NAME: ${TTS_COMPONENT_NAME:-OPEA_SPEECHT5_TTS}
+  #  depends_on:
+  #    speecht5-service:
+  #      condition: service_healthy
+  gptsovits-service:
+    image: ${REGISTRY:-opea}/gpt-sovits:${TAG:-latest}
+    container_name: gpt-sovits-service
+    ports:
+      - ${GPT_SOVITS_PORT:-9880}:9880
+    ipc: host
+    volumes:
+      - ./audio:/audio
+    environment:
+      no_proxy: ${no_proxy}
+      http_proxy: ${http_proxy}
+      https_proxy: ${https_proxy}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9880/health"]
+      interval: 10s
+      timeout: 6s
+      retries: 18
+  tts-gptsovits:
+    image: ${REGISTRY:-opea}/tts:${TAG:-latest}
+    container_name: tts-gptsovits-service
+    ports:
+      - ${TTS_PORT:-9088}:9088
+    ipc: host
+    environment:
+      TTS_ENDPOINT: http://172.24.230.22:9880
+      TTS_COMPONENT_NAME: ${TTS_COMPONENT_NAME:-OPEA_GPTSOVITS_TTS}
+    depends_on:
+      gptsovits-service:
+        condition: service_healthy
+  #vllm-service:
+  #  image: ${REGISTRY:-opea}/vllm:${TAG:-latest}
+  #  container_name: vllm-service
+  #  ports:
+  #    - "9009:80"
+  #  volumes:
+  #    - "./data:/data"
+  #  shm_size: 128g
+  #  environment:
+  #    no_proxy: ${no_proxy}
+  #    http_proxy: ${http_proxy}
+  #    https_proxy: ${https_proxy}
+  #    HF_TOKEN: ${HUGGINGFACEHUB_API_TOKEN}
+  #    LLM_MODEL_ID: ${LLM_MODEL_ID}
+  #    VLLM_TORCH_PROFILER_DIR: "/mnt"
+  #  deploy:
+  #    resources:
+  #      reservations:
+  #        devices:
+  #          - driver: nvidia
+  #            count: 1
+  #            capabilities: [gpu]
+  #  healthcheck:
+  #    test: ["CMD-SHELL", "curl -f http://$host_ip:9009/health || exit 1"]
+  #    interval: 10s
+  #    timeout: 10s
+  #    retries: 100
+  #  command: --model meta-llama/Llama-3.2-1B --host 0.0.0.0 --port 80
