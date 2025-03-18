@@ -1,0 +1,7 @@
+fastapi==0.95.2
+uvicorn==0.22.0
+sqlite3==0.0.1
+pandas==2.0.3
+reportlab==4.0.4
+requests==2.31.0
+python-multipart==0.0.6
