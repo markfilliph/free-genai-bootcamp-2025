@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcard API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .response {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+        .success {
+            color: #4CAF50;
+        }
+        .error {
+            color: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <h1>Flashcard API Test</h1>
+    
+    <div class="section">
+        <h2>1. Register User</h2>
+        <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" value="testuser">
+        </div>
+        <div class="form-group">
+            <label for="email">Email:</label>
+            <input type="email" id="email" value="test@example.com">
+        </div>
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" value="password123">
+        </div>
+        <button onclick="registerUser()">Register</button>
+        <div id="registerResponse" class="response"></div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Login</h2>
+        <div class="form-group">
+            <label for="loginUsername">Username:</label>
+            <input type="text" id="loginUsername" value="testuser">
+        </div>
+        <div class="form-group">
+            <label for="loginPassword">Password:</label>
+            <input type="password" id="loginPassword" value="password123">
+        </div>
+        <button onclick="login()">Login</button>
+        <div id="loginResponse" class="response"></div>
+    </div>
+    
+    <div class="section">
+        <h2>3. Create Deck</h2>
+        <div class="form-group">
+            <label for="deckName">Deck Name:</label>
+            <input type="text" id="deckName" value="Spanish Basics">
+        </div>
+        <button onclick="createDeck()">Create Deck</button>
+        <div id="createDeckResponse" class="response"></div>
+    </div>
+    
+    <div class="section">
+        <h2>4. Get Decks</h2>
+        <button onclick="getDecks()">Get Decks</button>
+        <div id="getDecksResponse" class="response"></div>
+    </div>
+    
+    <div class="section">
+        <h2>5. Create Flashcard</h2>
+        <div class="form-group">
+            <label for="deckId">Deck ID:</label>
+            <input type="number" id="deckId" value="1">
+        </div>
+        <div class="form-group">
+            <label for="word">Word:</label>
+            <input type="text" id="word" value="hola">
+        </div>
+        <div class="form-group">
+            <label for="exampleSentence">Example Sentence:</label>
+            <input type="text" id="exampleSentence" value="Hola, ¿cómo estás?">
+        </div>
+        <div class="form-group">
+            <label for="translation">Translation:</label>
+            <input type="text" id="translation" value="Hello, how are you?">
+        </div>
+        <div class="form-group">
+            <label for="culturalNote">Cultural Note:</label>
+            <textarea id="culturalNote">Common greeting in Spanish-speaking countries</textarea>
+        </div>
+        <button onclick="createFlashcard()">Create Flashcard</button>
+        <div id="createFlashcardResponse" class="response"></div>
+    </div>
+    
+    <div class="section">
+        <h2>6. Get Flashcards</h2>
+        <div class="form-group">
+            <label for="flashcardDeckId">Deck ID:</label>
+            <input type="number" id="flashcardDeckId" value="1">
+        </div>
+        <button onclick="getFlashcards()">Get Flashcards</button>
+        <div id="getFlashcardsResponse" class="response"></div>
+    </div>
+    
+    <div class="section">
+        <h2>7. Generate Content</h2>
+        <div class="form-group">
+            <label for="genWord">Word:</label>
+            <input type="text" id="genWord" value="hablar">
+        </div>
+        <div class="form-group">
+            <label for="isVerb">Is Verb:</label>
+            <input type="checkbox" id="isVerb" checked>
+        </div>
+        <button onclick="generateContent()">Generate Content</button>
+        <div id="generateContentResponse" class="response"></div>
+    </div>
+
+    <script>
+        // Base URL for the API
+        const BASE_URL = "http://localhost:8000/api";
+        let accessToken = "";
+        
+        // Helper function to display response
+        function displayResponse(elementId, data, isSuccess = true) {
+            const element = document.getElementById(elementId);
+            element.textContent = JSON.stringify(data, null, 2);
+            element.className = isSuccess ? "response success" : "response error";
+        }
+        
+        // 1. Register User
+        async function registerUser() {
+            const username = document.getElementById("username").value;
+            const email = document.getElementById("email").value;
+            const password = document.getElementById("password").value;
+            
+            try {
+                const response = await fetch(`${BASE_URL}/auth/register`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        username,
+                        email,
+                        password
+                    })
+                });
+                
+                const data = await response.json();
+                displayResponse("registerResponse", data, response.ok);
+            } catch (error) {
+                displayResponse("registerResponse", { error: error.message }, false);
+            }
+        }
+        
+        // 2. Login
+        async function login() {
+            const username = document.getElementById("loginUsername").value;
+            const password = document.getElementById("loginPassword").value;
+            
+            try {
+                const formData = new FormData();
+                formData.append("username", username);
+                formData.append("password", password);
+                
+                const response = await fetch(`${BASE_URL}/auth/login`, {
+                    method: "POST",
+                    body: formData
+                });
+                
+                const data = await response.json();
+                displayResponse("loginResponse", data, response.ok);
+                
+                if (response.ok && data.access_token) {
+                    accessToken = data.access_token;
+                }
+            } catch (error) {
+                displayResponse("loginResponse", { error: error.message }, false);
+            }
+        }
+        
+        // 3. Create Deck
+        async function createDeck() {
+            const name = document.getElementById("deckName").value;
+            
+            try {
+                const response = await fetch(`${BASE_URL}/decks`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${accessToken}`
+                    },
+                    body: JSON.stringify({
+                        name
+                    })
+                });
+                
+                const data = await response.json();
+                displayResponse("createDeckResponse", data, response.ok);
+            } catch (error) {
+                displayResponse("createDeckResponse", { error: error.message }, false);
+            }
+        }
+        
+        // 4. Get Decks
+        async function getDecks() {
+            try {
+                const response = await fetch(`${BASE_URL}/decks`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${accessToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                displayResponse("getDecksResponse", data, response.ok);
+            } catch (error) {
+                displayResponse("getDecksResponse", { error: error.message }, false);
+            }
+        }
+        
+        // 5. Create Flashcard
+        async function createFlashcard() {
+            const deckId = document.getElementById("deckId").value;
+            const word = document.getElementById("word").value;
+            const exampleSentence = document.getElementById("exampleSentence").value;
+            const translation = document.getElementById("translation").value;
+            const culturalNote = document.getElementById("culturalNote").value;
+            
+            try {
+                const response = await fetch(`${BASE_URL}/flashcards`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${accessToken}`
+                    },
+                    body: JSON.stringify({
+                        deck_id: parseInt(deckId),
+                        word,
+                        example_sentence: exampleSentence,
+                        translation,
+                        cultural_note: culturalNote
+                    })
+                });
+                
+                const data = await response.json();
+                displayResponse("createFlashcardResponse", data, response.ok);
+            } catch (error) {
+                displayResponse("createFlashcardResponse", { error: error.message }, false);
+            }
+        }
+        
+        // 6. Get Flashcards
+        async function getFlashcards() {
+            const deckId = document.getElementById("flashcardDeckId").value;
+            
+            try {
+                const response = await fetch(`${BASE_URL}/decks/${deckId}/flashcards`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${accessToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                displayResponse("getFlashcardsResponse", data, response.ok);
+            } catch (error) {
+                displayResponse("getFlashcardsResponse", { error: error.message }, false);
+            }
+        }
+        
+        // 7. Generate Content
+        async function generateContent() {
+            const word = document.getElementById("genWord").value;
+            const isVerb = document.getElementById("isVerb").checked;
+            
+            try {
+                const response = await fetch(`${BASE_URL}/generate`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${accessToken}`
+                    },
+                    body: JSON.stringify({
+                        word,
+                        is_verb: isVerb
+                    })
+                });
+                
+                const data = await response.json();
+                displayResponse("generateContentResponse", data, response.ok);
+            } catch (error) {
+                displayResponse("generateContentResponse", { error: error.message }, false);
+            }
+        }
+    </script>
+</body>
+</html>

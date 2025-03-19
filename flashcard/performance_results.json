@@ -1,0 +1,62 @@
+{
+  "Create Flashcard": {
+    "min": 0.026366472244262695,
+    "max": 0.02940225601196289,
+    "avg": 0.027765671412150066,
+    "median": 0.02752828598022461,
+    "p95": 0.02940225601196289,
+    "success_rate": 1.0
+  },
+  "Get Decks": {
+    "min": 0.014560461044311523,
+    "max": 0.015218734741210938,
+    "avg": 0.014902750651041666,
+    "median": 0.014929056167602539,
+    "p95": 0.015218734741210938,
+    "success_rate": 1.0
+  },
+  "Get Flashcards": {
+    "min": 0.015945911407470703,
+    "max": 0.01658153533935547,
+    "avg": 0.016345898310343426,
+    "median": 0.0165102481842041,
+    "p95": 0.01658153533935547,
+    "success_rate": 1.0
+  },
+  "Generate Content": {
+    "min": 0.009846925735473633,
+    "max": 0.009893417358398438,
+    "avg": 0.009874661763509115,
+    "median": 0.009883642196655273,
+    "p95": 0.009893417358398438,
+    "success_rate": 1.0
+  },
+  "Create Flashcard (Concurrent)": {
+    "total_time": 0.11946392059326172,
+    "total_requests": 4,
+    "successful_requests": 4,
+    "success_rate": 1.0,
+    "requests_per_second": 33.482912498902344
+  },
+  "Get Decks (Concurrent)": {
+    "total_time": 0.0622100830078125,
+    "total_requests": 4,
+    "successful_requests": 4,
+    "success_rate": 1.0,
+    "requests_per_second": 64.29825852342408
+  },
+  "Get Flashcards (Concurrent)": {
+    "total_time": 0.06759238243103027,
+    "total_requests": 4,
+    "successful_requests": 4,
+    "success_rate": 1.0,
+    "requests_per_second": 59.17826619118669
+  },
+  "Generate Content (Concurrent)": {
+    "total_time": 0.03881192207336426,
+    "total_requests": 4,
+    "successful_requests": 4,
+    "success_rate": 1.0,
+    "requests_per_second": 103.06111592306605
+  }
+}
