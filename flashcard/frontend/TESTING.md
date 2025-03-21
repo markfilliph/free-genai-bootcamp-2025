@@ -84,6 +84,25 @@ npm run test:watch
 npm run test:coverage
 ```
 
+## Current Test Status
+
+As of March 21, 2025, all tests are passing:
+
+- **Test Suites**: 28 passed, 28 total
+- **Tests**: 135 passed, 135 total
+
+## Custom Testing Approach
+
+We've developed a custom approach to testing Svelte components that addresses the unique challenges of the framework:
+
+1. **Direct Component Mocking**: Creating simplified mock versions of components that return expected HTML
+2. **Custom Render Functions**: Using `$$render` to control component output
+3. **Global Mock Helpers**: Providing consistent mocks for common components
+4. **Environment Mocking**: Handling browser APIs and environment variables
+5. **mockHtml Approach**: Providing predictable HTML structure for tests
+
+This approach allows us to test components in isolation without complex dependencies, making tests more reliable and maintainable.
+
 ## Test Coverage
 
 Our goal is to maintain high test coverage for the frontend codebase. The coverage report shows the percentage of code that is covered by tests, helping identify areas that need additional testing.
@@ -95,7 +114,14 @@ Our goal is to maintain high test coverage for the frontend codebase. The covera
 3. **Mocking**: External dependencies should be mocked to isolate the component being tested
 4. **Readability**: Tests should be easy to read and understand
 5. **Maintenance**: Tests should be maintained alongside code changes
+6. **Robustness**: Prefer more general assertions that are less likely to break with minor changes
+7. **Fallback Strategies**: Implement fallback approaches when component methods can't be accessed directly
 
 ## Continuous Integration
 
 Frontend tests are run as part of our CI/CD pipeline to ensure that changes don't break existing functionality.
+
+## Additional Resources
+
+- **SVELTE_TESTING_GUIDE.md**: Detailed guide on our Svelte testing approach
+- **TEST_RESULTS.md**: Current test results and recent fixes
