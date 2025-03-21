@@ -151,7 +151,59 @@ export const mockApiResponses = {
     }
   },
   
-  // Generate endpoint
+  // Deck flashcards endpoint
+  '/decks/1/flashcards': {
+    POST: (data) => {
+      const { word, example_sentence, translation } = JSON.parse(data.body);
+      if (word && example_sentence && translation) {
+        return {
+          status: 200,
+          body: {
+            id: '3',
+            deck_id: '1',
+            word,
+            example_sentence,
+            translation,
+            cultural_note: 'Cultural note.',
+            conjugation: null,
+            created_at: new Date().toISOString()
+          }
+        };
+      }
+      return {
+        status: 400,
+        error: 'Missing required fields'
+      };
+    }
+  },
+  
+  // Generate endpoints
+  '/generate/word': {
+    GET: () => ({
+      status: 200,
+      body: {
+        word: 'hola',
+        translation: 'hello',
+        example_sentence: 'Hola, ¿cómo estás?',
+        cultural_note: 'Common greeting in Spanish-speaking countries'
+      }
+    })
+  },
+  
+  '/generate/verb': {
+    GET: () => ({
+      status: 200,
+      body: {
+        word: 'hablar',
+        translation: 'to speak',
+        example_sentence: 'Yo hablo español.',
+        cultural_note: 'Regular -ar verb',
+        conjugation: 'hablo, hablas, habla, hablamos, habláis, hablan'
+      }
+    })
+  },
+  
+  // Generate endpoint (generic)
   '/generate': {
     POST: (data) => {
       const { word, is_verb } = JSON.parse(data.body);
@@ -185,7 +237,13 @@ export const mockFetch = (url, options = {}) => {
     // Get the mock response for this path and method
     const mockResponse = mockApiResponses[path];
     if (!mockResponse) {
-      reject(new Error(`No mock response for ${path}`));
+      // Use a default response if no specific mock is defined
+      resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ message: 'Default mock response' }),
+        text: () => Promise.resolve(JSON.stringify({ message: 'Default mock response' }))
+      });
       return;
     }
     

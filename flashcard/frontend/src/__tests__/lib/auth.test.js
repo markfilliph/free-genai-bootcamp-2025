@@ -3,12 +3,12 @@ import { get } from 'svelte/store';
 
 describe('Auth Module', () => {
   // Mock localStorage
-  const mockStorage = {};
+  let mockStorage = {};
   const mockLocalStorage = {
     getItem: jest.fn(key => mockStorage[key] || null),
     setItem: jest.fn((key, value) => { mockStorage[key] = value; }),
     removeItem: jest.fn(key => { delete mockStorage[key]; }),
-    clear: jest.fn(() => { Object.keys(mockStorage).forEach(key => delete mockStorage[key]); }),
+    clear: jest.fn(() => { mockStorage = {}; }),
     length: 0
   };
   

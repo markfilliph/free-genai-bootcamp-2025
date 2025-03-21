@@ -98,12 +98,12 @@ jest.mock('@testing-library/svelte', () => ({
 }));
 
 // Import and use our API mock
-import { apiFetch, API_BASE } from './mocks/api-simple';
-
 // Mock API module
 jest.mock('../../lib/api', () => ({
-  apiFetch,
-  API_BASE
+  apiFetch: jest.fn(async (path, options = {}) => {
+    return { message: 'Mock API response from setup-simple' };
+  }),
+  API_BASE: 'http://localhost:8000'
 }), { virtual: true });
 
 // Mock Vite's import.meta.env

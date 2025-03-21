@@ -144,7 +144,10 @@ const render = jest.fn((component, options = {}) => {
       $set: jest.fn(),
       $on: jest.fn(),
       $$: { ctx: [jest.fn()] }
-    }
+    },
+    // Include fireEvent and waitFor in the return value
+    fireEvent,
+    waitFor
   };
 });
 
@@ -178,8 +181,29 @@ const fireEvent = {
   })
 };
 
+// Create a waitFor utility that resolves after assertions pass
+const waitFor = async (callback, options = {}) => {
+  const { timeout = 1000, interval = 50 } = options;
+  const startTime = Date.now();
+
+  const checkCondition = async () => {
+    try {
+      await callback();
+      return true;
+    } catch (error) {
+      if (Date.now() - startTime >= timeout) {
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, interval));
+      return checkCondition();
+    }
+  };
+
+  return checkCondition();
+};
+
 // Export the mock functions
-export { render, fireEvent };
+export { render, fireEvent, waitFor };
 
 // Add a simple test to prevent the "no tests" error
 describe('Testing Library Svelte Mock', () => {
@@ -190,3 +214,5 @@ describe('Testing Library Svelte Mock', () => {
     expect(typeof result.getByText).toBe('function');
   });
 });
+
+export { MockElement };

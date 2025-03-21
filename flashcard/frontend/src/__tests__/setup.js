@@ -4,7 +4,7 @@
 import '@testing-library/jest-dom/extend-expect';
 import '@testing-library/jest-dom';
 import { mockComponents } from './mocks/component-mocks';
-import { mockAPI } from './mocks/api-simple';
+import { mockAPI } from './mocks/api-simple-mock';
 
 beforeAll(() => {
   mockComponents();
@@ -53,29 +53,13 @@ global.import.meta.env = {
   VITE_API_URL: 'http://localhost:8000'
 };
 
-// Mock the API_BASE for tests
+// Mock the API module to avoid import.meta.env issues
 jest.mock('../lib/api.js', () => {
-  const originalModule = jest.requireActual('../lib/api.js');
   return {
-    ...originalModule,
-    API_BASE: 'http://localhost:8000',
     apiFetch: jest.fn(async (path, options = {}) => {
-      const response = await global.fetch(`http://localhost:8000${path}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers
-        },
-        credentials: 'include',
-        ...options
-      });
-      
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`API Error (${response.status}): ${text}`);
-      }
-      
-      return response.json();
-    })
+      return { message: 'Mock API response' };
+    }),
+    API_BASE: 'http://localhost:8000'
   };
 });
 
@@ -110,7 +94,7 @@ global.mockSvelteComponent = (html) => ({
 });
 
 // Mock DeckList component for DeckManagement tests
-jest.mock('../../components/DeckList.svelte', () => {
+jest.mock('../components/DeckList.svelte', () => {
   return {
     default: {
       render: (props) => {

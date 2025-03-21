@@ -34,12 +34,12 @@ describe('FlashcardForm Component', () => {
     // Create a mock function to test if form submission handler is called
     const mockSubmit = jest.fn();
     
-    const { getByPlaceholderText, getByText } = render(FlashcardForm, { 
+    const { getByPlaceholderText, getByText, container } = render(FlashcardForm, { 
       props: { deckId: '1' } 
     });
     
     // Override the component's submit handler
-    const form = document.querySelector('form');
+    const form = container.querySelector('form');
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       mockSubmit();

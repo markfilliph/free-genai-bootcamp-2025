@@ -130,3 +130,15 @@ export const apiFetch = jest.fn().mockImplementation((endpoint, options = {}) =>
   // Default response
   return Promise.resolve({ message: 'Mock API response' });
 });
+
+// Function to set up the mock API
+export function mockAPI() {
+  // Reset the mock implementation
+  apiFetch.mockClear();
+  
+  // Return the mocked API
+  return {
+    apiFetch,
+    API_BASE
+  };
+}

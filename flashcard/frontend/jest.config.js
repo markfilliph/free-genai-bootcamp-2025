@@ -8,7 +8,7 @@ module.exports = {
   bail: false,
   verbose: true,
   transformIgnorePatterns: ["node_modules"],
-  setupFilesAfterEnv: ["./src/__tests__/setup-minimal.js"],
+  setupFilesAfterEnv: ["./src/__tests__/setup.js"],
   testEnvironment: "jsdom",
   moduleNameMapper: {
     // Handle import.meta.env in Vite

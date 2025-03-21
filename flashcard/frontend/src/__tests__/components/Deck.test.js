@@ -1,4 +1,4 @@
-import { render } from './mocks/testing-library-svelte';
+import { render } from '../mocks/testing-library-svelte';
 import * as utils from '../../lib/utils.js';
 
 // Mock the utils module

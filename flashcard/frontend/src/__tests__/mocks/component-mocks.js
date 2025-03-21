@@ -12,18 +12,11 @@ export function mockComponents() {
       render: (props) => `<div data-testid="mock-decklist"></div>`
     }
   }));
-
-  // Add comprehensive mocks
-jest.mock('svelte-routing', () => ({
-  Link: {
-    render: () => '<a data-testid="mock-link"></a>'
-  }
-}));
-
-jest.mock('../../components/DeckList.svelte', () => ({
-  default: {
-    render: () => '<div data-testid="mock-decklist"></div>'
-  }
-}));
-
 }
+
+// Add simple test to prevent Jest from complaining
+describe('Component Mocks', () => {
+  test('mockComponents function exists', () => {
+    expect(typeof mockComponents).toBe('function');
+  });
+});

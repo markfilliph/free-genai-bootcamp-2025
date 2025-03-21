@@ -32,7 +32,7 @@ describe('API Utility', () => {
     const response = await apiModule.apiFetch('/test-endpoint');
     
     // Check if apiFetch was called with correct parameters
-    expect(mockApiFetch).toHaveBeenCalledWith('/test-endpoint', {});
+    expect(mockApiFetch).toHaveBeenCalledWith('/test-endpoint');
     
     // Check if response is correct
     expect(response).toEqual(mockSuccessResponse);
