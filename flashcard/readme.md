@@ -44,6 +44,20 @@ We've implemented several testing strategies to ensure the reliability of our ap
 - `backend_minimal.py`: A lightweight implementation of the backend using standard Python libraries.
 - Helps isolate and troubleshoot issues with the core functionality without dependency complications.
 
+### 6. Database Schema Verification
+- `verify_db_schema.py`: Verifies that the database schema matches the expected structure.
+- Checks tables, columns, foreign keys, and indexes.
+
+### 7. Performance Testing
+- `test_performance.py`: Measures API response times for various endpoints.
+- Tests both individual and concurrent requests to identify bottlenecks.
+
+### 8. Frontend Testing
+- Jest and Testing Library for Svelte components testing.
+- Unit tests for individual components (FlashcardForm, Navbar, DeckList, etc.).
+- Integration tests for API interactions and state management.
+- Mock implementations for external dependencies.
+
 To run the tests, use the following commands:
 
 ```bash
@@ -52,6 +66,20 @@ python test_models.py
 
 # Test API endpoints
 python test_minimal_api.py
+
+# Verify database schema
+python verify_db_schema.py
+
+# Run performance tests
+python test_performance.py
+
+# Run frontend tests
+cd frontend
+npm test
+
+# Run frontend tests with coverage
+cd frontend
+npm run test:coverage
 
 # Start the minimal backend server
 python backend_minimal.py
