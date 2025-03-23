@@ -1,0 +1,101 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-frontend:
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./frontend
+        
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: './frontend/package-lock.json'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run tests with coverage
+      run: npm test -- --coverage
+      
+    - name: Check coverage thresholds
+      run: |
+        COVERAGE_REPORT=$(cat coverage/coverage-summary.json)
+        TOTAL_LINES=$(echo $COVERAGE_REPORT | jq '.total.lines.total')
+        COVERED_LINES=$(echo $COVERAGE_REPORT | jq '.total.lines.covered')
+        COVERAGE_PCT=$(echo "scale=2; $COVERED_LINES * 100 / $TOTAL_LINES" | bc)
+        
+        echo "Total coverage: $COVERAGE_PCT%"
+        
+        # Set minimum coverage threshold
+        MIN_COVERAGE=50
+        
+        if (( $(echo "$COVERAGE_PCT < $MIN_COVERAGE" | bc -l) )); then
+          echo "Coverage is below the minimum threshold of $MIN_COVERAGE%"
+          exit 1
+        fi
+    
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: frontend-coverage-report
+        path: ./frontend/coverage/
+        
+  test-backend:
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./backend
+        
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+        cache-dependency-path: './backend/requirements.txt'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+    
+    - name: Run tests with coverage
+      run: pytest --cov=. --cov-report=xml
+      
+    - name: Check coverage thresholds
+      run: |
+        COVERAGE=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); root = tree.getroot(); print(root.attrib['line-rate'])")
+        COVERAGE_PCT=$(echo "scale=2; $COVERAGE * 100" | bc)
+        
+        echo "Total coverage: $COVERAGE_PCT%"
+        
+        # Set minimum coverage threshold
+        MIN_COVERAGE=50
+        
+        if (( $(echo "$COVERAGE_PCT < $MIN_COVERAGE" | bc -l) )); then
+          echo "Coverage is below the minimum threshold of $MIN_COVERAGE%"
+          exit 1
+        fi
+    
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: backend-coverage-report
+        path: ./backend/coverage.xml
