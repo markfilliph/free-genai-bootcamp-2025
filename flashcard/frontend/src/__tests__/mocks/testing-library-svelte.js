@@ -178,6 +178,14 @@ const fireEvent = {
     const event = new Event('submit');
     element.dispatchEvent(event);
     return Promise.resolve();
+  }),
+  keyDown: jest.fn((element, options = {}) => {
+    const event = new Event('keydown');
+    if (options.key) {
+      event.key = options.key;
+    }
+    element.dispatchEvent(event);
+    return Promise.resolve();
   })
 };
 

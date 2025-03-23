@@ -1,0 +1,54 @@
+name: Frontend Tests
+
+on:
+  push:
+    branches: [ main, master, development ]
+    paths:
+      - 'frontend/**'
+  pull_request:
+    branches: [ main, master, development ]
+    paths:
+      - 'frontend/**'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: './frontend/package-lock.json'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run tests
+      run: npm test
+    
+    - name: Generate coverage report
+      run: npm run test:coverage
+    
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: ./frontend/coverage/
+    
+    - name: Check coverage thresholds
+      run: |
+        TOTAL_COVERAGE=$(cat ./coverage/coverage-summary.json | jq '.total.lines.pct')
+        echo "Total coverage: $TOTAL_COVERAGE%"
+        if (( $(echo "$TOTAL_COVERAGE < 50" | bc -l) )); then
+          echo "Warning: Coverage is below 50%"
+          # In the future, this can be changed to fail the build
+          # exit 1
+        fi
