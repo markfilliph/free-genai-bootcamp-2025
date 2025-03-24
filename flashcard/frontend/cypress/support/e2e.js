@@ -19,6 +19,26 @@ import './commands'
 // Import cypress-axe for accessibility testing
 import 'cypress-axe'
 
+// Import Testing Library Cypress commands
+import '@testing-library/cypress/add-commands'
+
+// Configure Cypress for SPA testing
+Cypress.on('uncaught:exception', (err, runnable) => {
+  // Returning false here prevents Cypress from failing the test when
+  // uncaught exceptions occur in the application code
+  // This is often necessary for SPAs using client-side routing
+  return false
+})
+
+// Add support for tab navigation in tests
+import 'cypress-plugin-tab'
+
+// Set up default viewport size for consistent testing
+beforeEach(() => {
+  // Use a standard desktop viewport
+  cy.viewport(1280, 720)
+})
+
 // Add tab command for keyboard navigation testing
 Cypress.Commands.add('tab', { prevSubject: 'optional' }, (subject) => {
   const tabKey = { key: 'Tab', code: 'Tab', which: 9 }

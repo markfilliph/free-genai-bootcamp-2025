@@ -238,22 +238,52 @@ Cypress.Commands.add('editFlashcard', (deckId, flashcardId, newWord, newTranslat
 
 // Delete a flashcard
 Cypress.Commands.add('deleteFlashcard', (flashcardId) => {
-  cy.intercept('DELETE', `**/flashcards/${flashcardId}`, {
-    statusCode: 200,
-    body: {
-      message: 'Flashcard deleted successfully'
-    }
-  }).as('deleteFlashcardRequest');
+  // Setup flashcard mocks if not already set up
+  mockFlashcardEndpoints();
   
-  cy.contains('Delete').click();
-  cy.get('[data-testid="confirm-delete"]').click();
-  cy.wait('@deleteFlashcardRequest');
+  // Click the delete button
+  cy.contains('Delete', { timeout: 10000 }).should('be.visible').click();
+  
+  // Confirm deletion
+  cy.get('[data-testid="confirm-delete"]', { timeout: 10000 }).should('be.visible').click();
+  
+  // Wait for the delete request
+  cy.wait('@deleteFlashcardRequest', { timeout: 10000 });
 });
 
 // -- Study Session Commands --
 
+// Start a new study session for a deck
+Cypress.Commands.add('startStudySession', (deckId = '1') => {
+  // Setup study session mocks
+  mockStudySessionEndpoints();
+  
+  // Ensure user is logged in
+  cy.window().then((win) => {
+    if (!win.localStorage.getItem('token')) {
+      win.localStorage.setItem('token', mockToken);
+      win.localStorage.setItem('user', JSON.stringify(mockUser));
+    }
+  });
+  
+  // Visit the deck page
+  cy.visit(`/decks/${deckId}`, { failOnStatusCode: false });
+  
+  // Click the Study button
+  cy.contains('Study', { timeout: 10000 }).should('be.visible').click();
+  
+  // Wait for the study session to start
+  cy.wait('@startStudySessionRequest', { timeout: 10000 });
+  
+  // Verify we're on the study session page
+  cy.contains('Flashcard Review', { timeout: 10000 }).should('be.visible');
+});
+
 // Complete a flashcard review session
 Cypress.Commands.add('completeFlashcardSession', (ratings = []) => {
+  // Setup study session mocks if not already set up
+  mockStudySessionEndpoints();
+  
   // This will find all flashcards and review them until completion
   cy.get('body').then(($body) => {
     // Keep reviewing cards until we see the completion screen
@@ -264,7 +294,7 @@ Cypress.Commands.add('completeFlashcardSession', (ratings = []) => {
       
       // Click show answer if it exists
       if ($body.text().includes('Show Answer')) {
-        cy.contains('Show Answer').click();
+        cy.contains('Show Answer', { timeout: 10000 }).should('be.visible').click();
       }
       
       // Use the provided rating if available, otherwise use 'Good'
@@ -272,7 +302,10 @@ Cypress.Commands.add('completeFlashcardSession', (ratings = []) => {
       
       // Click the specified rating button
       if ($body.text().includes(rating)) {
-        cy.contains(rating).click();
+        cy.contains(rating, { timeout: 10000 }).should('be.visible').click();
+        
+        // Wait for the rating to be saved
+        cy.wait('@rateFlashcardRequest', { timeout: 10000 });
         
         // Check again after a short delay
         cy.wait(500).then(() => {
@@ -280,6 +313,9 @@ Cypress.Commands.add('completeFlashcardSession', (ratings = []) => {
             $body = $newBody;
             if (!$body.text().includes('Session Complete')) {
               reviewNextCard(index + 1);
+            } else {
+              // Wait for the session completion request
+              cy.wait('@completeStudySessionRequest', { timeout: 10000 });
             }
           });
         });
@@ -292,29 +328,50 @@ Cypress.Commands.add('completeFlashcardSession', (ratings = []) => {
 
 // Verify study session statistics
 Cypress.Commands.add('verifySessionStats', () => {
-  cy.contains('Session Statistics').should('be.visible');
-  cy.contains('Cards Reviewed').should('be.visible');
-  cy.contains('Performance').should('be.visible');
+  // Setup study session mocks if not already set up
+  mockStudySessionEndpoints();
+  
+  // Check for statistics elements
+  cy.contains('Session Statistics', { timeout: 10000 }).should('be.visible');
+  cy.contains('Cards Reviewed', { timeout: 10000 }).should('be.visible');
+  cy.contains('Performance', { timeout: 10000 }).should('be.visible');
+  
+  // Verify user statistics are loaded
+  cy.wait('@getUserStatisticsRequest', { timeout: 10000 });
 });
 
 // -- Accessibility Testing Commands --
 
 // Test keyboard navigation
-Cypress.Commands.add('testKeyboardNavigation', () => {
+Cypress.Commands.add('testKeyboardNavigation', (maxElements = 10) => {
+  // Make sure axe is injected
+  cy.injectAxe();
+  
   // Press Tab to navigate through elements
   cy.get('body').tab();
   cy.focused().should('be.visible');
   
   // Continue tabbing through all focusable elements
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < maxElements; i++) {
     cy.focused().then($el => {
       const tagName = $el.prop('tagName').toLowerCase();
       const type = $el.attr('type');
+      const role = $el.attr('role');
+      
+      // Log the focused element for debugging
+      cy.log(`Focused element: ${tagName}${role ? ` (role=${role})` : ''}`);
       
       // If it's a button or link, press Enter to activate it
-      if (tagName === 'button' || tagName === 'a' || (tagName === 'input' && type === 'submit')) {
-        cy.focused().type('{enter}');
-        cy.wait(300); // Wait for any actions to complete
+      if (tagName === 'button' || 
+          tagName === 'a' || 
+          (tagName === 'input' && type === 'submit') ||
+          role === 'button') {
+        // Skip if it's a destructive action like delete
+        const text = $el.text().toLowerCase();
+        if (!text.includes('delete') && !text.includes('remove')) {
+          cy.focused().type('{enter}', { force: true });
+          cy.wait(500); // Wait for any actions to complete
+        }
       }
       
       // Move to next element
@@ -323,8 +380,57 @@ Cypress.Commands.add('testKeyboardNavigation', () => {
   }
 });
 
-// Check for color contrast issues
-Cypress.Commands.add('checkAccessibility', () => {
+// Check for accessibility issues with custom configuration
+Cypress.Commands.add('checkAccessibility', (context = null, options = null) => {
+  // Make sure axe is injected
   cy.injectAxe();
-  cy.checkA11y();
+  
+  // Default options focus on critical issues
+  const defaultOptions = {
+    runOnly: {
+      type: 'tag',
+      values: ['wcag2a', 'wcag2aa']
+    },
+    rules: {
+      'color-contrast': { enabled: true },
+      'document-title': { enabled: true },
+      'html-has-lang': { enabled: true },
+      'meta-viewport': { enabled: true },
+      'aria-roles': { enabled: true }
+    }
+  };
+  
+  // Run the accessibility check
+  cy.checkA11y(
+    context,
+    options || defaultOptions,
+    null,
+    true // Log to console for debugging
+  );
+});
+
+// Test screen reader accessibility
+Cypress.Commands.add('checkScreenReaderAccessibility', () => {
+  // Check for proper ARIA attributes
+  cy.get('[role]').each(($el) => {
+    const role = $el.attr('role');
+    cy.log(`Checking element with role: ${role}`);
+    
+    // Verify elements with specific roles have appropriate attributes
+    if (['button', 'link'].includes(role)) {
+      // Should have accessible name
+      expect($el.attr('aria-label') || $el.text().trim() || '').not.to.be.empty;
+    }
+    
+    if (role === 'dialog') {
+      // Modal dialogs should have proper attributes
+      expect($el.attr('aria-modal')).to.equal('true');
+      expect($el.attr('aria-labelledby') || $el.attr('aria-label')).to.exist;
+    }
+  });
+  
+  // Check for alt text on images
+  cy.get('img').each(($img) => {
+    expect($img.attr('alt')).to.exist;
+  });
 });

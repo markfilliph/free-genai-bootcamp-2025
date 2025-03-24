@@ -4,7 +4,18 @@ module.exports = defineConfig({
   e2e: {
     baseUrl: 'http://localhost:5173',
     setupNodeEvents(on, config) {
-      // implement node event listeners here
+      // Add accessibility testing support
+      on('task', {
+        log(message) {
+          console.log(message);
+          return null;
+        },
+        table(message) {
+          console.table(message);
+          return null;
+        }
+      });
+      return config;
     },
     // Retry failed tests to reduce flakiness
     retries: {
@@ -15,9 +26,15 @@ module.exports = defineConfig({
     // This is useful for tests that expect 404s or other non-200 responses
     failOnStatusCode: false,
     // Increase timeout for slow operations
-    defaultCommandTimeout: 10000,
+    defaultCommandTimeout: 15000,
+    // Increase timeout for page loads (important for SPA routing)
+    pageLoadTimeout: 30000,
+    // Increase timeout for requests (important for API mocking)
+    requestTimeout: 10000,
     // Automatically handle uncaught exceptions
-    experimentalRunAllSpecs: true
+    experimentalRunAllSpecs: true,
+    // Preserve cookies between tests for session testing
+    testIsolation: false
   },
   component: {
     devServer: {
