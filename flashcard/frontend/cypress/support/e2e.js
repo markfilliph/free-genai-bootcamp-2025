@@ -16,6 +16,20 @@
 // Import commands.js using ES2015 syntax:
 import './commands'
 
+// Import cypress-axe for accessibility testing
+import 'cypress-axe'
+
+// Add tab command for keyboard navigation testing
+Cypress.Commands.add('tab', { prevSubject: 'optional' }, (subject) => {
+  const tabKey = { key: 'Tab', code: 'Tab', which: 9 }
+  if (subject) {
+    cy.wrap(subject).trigger('keydown', tabKey)
+  } else {
+    cy.focused().trigger('keydown', tabKey)
+  }
+  return cy.focused()
+})
+
 // Alternatively you can use CommonJS syntax:
 // require('./commands')
 
