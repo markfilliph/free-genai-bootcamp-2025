@@ -1,6 +1,7 @@
 <script>
     import { navigate } from 'svelte-routing';
     import { onMount } from 'svelte';
+    import { decks, flashcards } from '../lib/stores.js';
     
     // Flashcard data
     let frontText = '';
@@ -13,27 +14,50 @@
     let success = false;
     let selectedDeckName = '';
     let createdFlashcards = [];
+    let decksList = [];
     
-    // Mock decks data for selection
-    const mockDecks = [
-        { id: '1', name: 'Spanish Verbs' },
-        { id: '2', name: 'Food Vocabulary' },
-        { id: '3', name: 'Travel Phrases' }
-    ];
+    // Function to refresh decks list from localStorage
+    function refreshDecksList() {
+        decksList = decks.getAllDecks();
+        console.log('Refreshed decks in CreateFlashcards:', decksList);
+    }
+    
+    // Get the initial decks list
+    refreshDecksList();
+    
+    // Subscribe to the decks store for updates
+    const unsubscribeDecks = decks.subscribe(value => {
+        decksList = [...value]; // Create a new array to ensure reactivity
+        console.log('Decks updated in CreateFlashcards:', decksList);
+    });
     
     onMount(() => {
+        // Force refresh the decks list from localStorage
+        refreshDecksList();
+        
         // Check if there's a deckId in the URL
         const urlParams = new URLSearchParams(window.location.search);
         const urlDeckId = urlParams.get('deckId');
         
         if (urlDeckId) {
             deckId = urlDeckId;
-            // Find the deck name
-            const deck = mockDecks.find(d => d.id === deckId);
+            
+            // Find the deck directly from localStorage
+            const allDecks = decks.getAllDecks();
+            const deck = allDecks.find(d => d.id === urlDeckId);
+            
             if (deck) {
                 selectedDeckName = deck.name;
+                console.log('Found deck in localStorage:', deck);
+            } else {
+                console.log('Deck not found in localStorage:', urlDeckId);
             }
         }
+        
+        // Clean up subscriptions on component destruction
+        return () => {
+            unsubscribeDecks();
+        };
     });
     
     // Form validation
@@ -63,22 +87,21 @@
         isLoading = true;
         
         try {
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            console.log('Creating flashcard for deck:', deckId);
             
-            // Create a new flashcard object
-            const newFlashcard = {
-                id: Date.now().toString(),
-                deckId,
+            // Create a new flashcard using the store
+            const newCard = flashcards.addFlashcard(deckId, {
                 frontText,
                 backText,
                 examples,
-                notes,
-                createdAt: new Date().toISOString()
-            };
+                notes
+            });
             
-            // Add to the list of created flashcards
-            createdFlashcards = [...createdFlashcards, newFlashcard];
+            console.log('New flashcard created:', newCard);
+            
+            // Get the latest flashcards for this deck
+            createdFlashcards = flashcards.getFlashcardsByDeck(deckId);
+            console.log('Updated flashcards for deck:', createdFlashcards);
             
             // Show success message
             success = true;
@@ -96,6 +119,18 @@
             console.error('Error creating flashcard:', err);
         } finally {
             isLoading = false;
+        }
+    }
+    
+    // Update selected deck name when deck ID changes
+    $: {
+        if (deckId) {
+            const selectedDeck = decksList.find(d => d.id === deckId);
+            if (selectedDeck) {
+                selectedDeckName = selectedDeck.name;
+            }
+        } else {
+            selectedDeckName = '';
         }
     }
     
@@ -123,12 +158,9 @@
         <form on:submit|preventDefault={createFlashcard}>
             <div class="form-group">
                 <label for="deck-select">Select Deck</label>
-                <select id="deck-select" bind:value={deckId} on:change={() => {
-                    const deck = mockDecks.find(d => d.id === deckId);
-                    selectedDeckName = deck ? deck.name : '';
-                }} required>
+                <select id="deck-select" bind:value={deckId} required>
                     <option value="">-- Select a Deck --</option>
-                    {#each mockDecks as deck}
+                    {#each decksList as deck}
                         <option value={deck.id}>{deck.name}</option>
                     {/each}
                 </select>

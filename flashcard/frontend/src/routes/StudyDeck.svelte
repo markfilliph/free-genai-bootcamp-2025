@@ -1,56 +1,12 @@
 <script>
     import { onMount } from 'svelte';
     import { navigate } from 'svelte-routing';
-    
-    // Mock decks data
-    const mockDecks = [
-        {
-            id: '1',
-            name: 'Spanish Verbs',
-            description: 'Common Spanish verbs with conjugations',
-            cardCount: 25,
-            lastReviewed: '2025-03-20'
-        },
-        {
-            id: '2',
-            name: 'Food Vocabulary',
-            description: 'Words related to food and dining',
-            cardCount: 18,
-            lastReviewed: '2025-03-22'
-        },
-        {
-            id: '3',
-            name: 'Travel Phrases',
-            description: 'Useful phrases for traveling',
-            cardCount: 15,
-            lastReviewed: '2025-03-18'
-        }
-    ];
-    
-    // Mock flashcards for each deck
-    const mockFlashcards = {
-        '1': [
-            { id: '101', frontText: 'hablar', backText: 'to speak', examples: 'Yo hablo español. (I speak Spanish.)', notes: 'Regular -ar verb' },
-            { id: '102', frontText: 'comer', backText: 'to eat', examples: 'Ellos comen pizza. (They eat pizza.)', notes: 'Regular -er verb' },
-            { id: '103', frontText: 'vivir', backText: 'to live', examples: 'Nosotros vivimos en Madrid. (We live in Madrid.)', notes: 'Regular -ir verb' },
-            { id: '104', frontText: 'ser', backText: 'to be (permanent)', examples: 'Ella es doctora. (She is a doctor.)', notes: 'Irregular verb' },
-            { id: '105', frontText: 'estar', backText: 'to be (temporary)', examples: 'Estoy cansado. (I am tired.)', notes: 'Irregular verb' }
-        ],
-        '2': [
-            { id: '201', frontText: 'la manzana', backText: 'apple', examples: 'Me gusta comer manzanas. (I like to eat apples.)', notes: 'Feminine noun' },
-            { id: '202', frontText: 'el pan', backText: 'bread', examples: 'Quiero comprar pan. (I want to buy bread.)', notes: 'Masculine noun' },
-            { id: '203', frontText: 'la leche', backText: 'milk', examples: 'Bebo leche cada mañana. (I drink milk every morning.)', notes: 'Feminine noun' }
-        ],
-        '3': [
-            { id: '301', frontText: '¿Dónde está...?', backText: 'Where is...?', examples: '¿Dónde está el baño? (Where is the bathroom?)', notes: 'Question phrase' },
-            { id: '302', frontText: '¿Cuánto cuesta?', backText: 'How much does it cost?', examples: '¿Cuánto cuesta este libro? (How much does this book cost?)', notes: 'Question phrase' }
-        ]
-    };
+    import { decks, flashcards } from '../lib/stores.js';
     
     // Study session state
     let deckId = '';
     let deckName = '';
-    let flashcards = [];
+    let deckCards = [];
     let currentIndex = 0;
     let showAnswer = false;
     let loading = true;
@@ -62,6 +18,12 @@
     // Card status tracking
     let cardStatuses = [];
     
+    // Subscribe to stores
+    let decksList = [];
+    const unsubscribeDecks = decks.subscribe(value => {
+        decksList = value;
+    });
+    
     onMount(() => {
         // Get deck ID from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -70,27 +32,24 @@
         if (urlDeckId) {
             deckId = urlDeckId;
             
-            // Find the deck
-            const deck = mockDecks.find(d => d.id === deckId);
+            // Find the deck in the store
+            const deck = decksList.find(d => d.id === deckId);
             if (deck) {
                 deckName = deck.name;
                 
-                // Get flashcards for this deck
-                if (mockFlashcards[deckId]) {
-                    flashcards = [...mockFlashcards[deckId]];
-                    
+                // Get flashcards for this deck from the store
+                deckCards = flashcards.getFlashcardsByDeck(deckId);
+                
+                if (deckCards.length > 0) {
                     // Initialize card statuses
-                    cardStatuses = flashcards.map(() => ({ 
+                    cardStatuses = deckCards.map(() => ({ 
                         seen: false, 
                         correct: false,
                         incorrect: false 
                     }));
                     
                     // Mark first card as seen
-                    if (flashcards.length > 0) {
-                        cardStatuses[0].seen = true;
-                    }
-                    
+                    cardStatuses[0].seen = true;
                     loading = false;
                 } else {
                     error = 'No flashcards found for this deck.';
@@ -104,6 +63,11 @@
             error = 'No deck specified.';
             loading = false;
         }
+        
+        // Clean up subscriptions on component destruction
+        return () => {
+            unsubscribeDecks();
+        };
     });
     
     function toggleFlip(e) {
@@ -143,7 +107,7 @@
             // Move to next card
             showAnswer = false;
             
-            if (currentIndex < flashcards.length - 1) {
+            if (currentIndex < deckCards.length - 1) {
                 currentIndex++;
                 cardStatuses[currentIndex].seen = true;
             } else {
@@ -161,14 +125,14 @@
         incorrectCount = 0;
         
         // Reset card statuses
-        cardStatuses = flashcards.map(() => ({ 
+        cardStatuses = deckCards.map(() => ({ 
             seen: false, 
             correct: false,
             incorrect: false 
         }));
         
         // Mark first card as seen
-        if (flashcards.length > 0) {
+        if (deckCards.length > 0) {
             cardStatuses[0].seen = true;
         }
     }
@@ -210,7 +174,7 @@
                     <div class="stat-label">Incorrect</div>
                 </div>
                 <div class="stat-item total">
-                    <div class="stat-value">{flashcards.length}</div>
+                    <div class="stat-value">{deckCards.length}</div>
                     <div class="stat-label">Total Cards</div>
                 </div>
             </div>
@@ -223,10 +187,10 @@
     {:else}
         <div class="study-progress">
             <div class="progress-bar">
-                <div class="progress-fill" style="width: {(currentIndex / flashcards.length) * 100}%"></div>
+                <div class="progress-fill" style="width: {(currentIndex / deckCards.length) * 100}%"></div>
             </div>
             <div class="progress-text">
-                Card {currentIndex + 1} of {flashcards.length}
+                Card {currentIndex + 1} of {deckCards.length}
             </div>
         </div>
         
@@ -243,7 +207,7 @@
             >
               <!-- Front (Question) -->
               <div class="flashcard-front">
-                <p class="card-text">{flashcards[currentIndex].frontText}</p>
+                <p class="card-text">{deckCards[currentIndex].frontText}</p>
                 <button class="show-answer-button" on:click|stopPropagation={showCardAnswer}>
                   Show Answer
                 </button>
@@ -251,11 +215,11 @@
               
               <!-- Back (Answer) -->
               <div class="flashcard-back">
-                <p class="card-text">{flashcards[currentIndex].backText}</p>
-                {#if flashcards[currentIndex].examples}
+                <p class="card-text">{deckCards[currentIndex].backText}</p>
+                {#if deckCards[currentIndex].examples}
                   <div class="card-examples">
                     <h4>Examples:</h4>
-                    <p>{flashcards[currentIndex].examples}</p>
+                    <p>{deckCards[currentIndex].examples}</p>
                   </div>
                 {/if}
               </div>

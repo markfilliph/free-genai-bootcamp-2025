@@ -13,24 +13,39 @@
         </div>
     </section>
     
-    <section class="features">
-        <h2>Key Features</h2>
-        <div class="feature-grid">
-            <div class="feature-card">
-                <h3>Flashcard Creation</h3>
-                <p>Create flashcards with words, phrases, or verbs in Spanish with automatic example generation</p>
+    <section class="features-section">
+        <h2>Our Powerful Learning Tools</h2>
+        <div class="features-container">
+            <div class="feature-item">
+                <div class="feature-icon">📝</div>
+                <div class="feature-content">
+                    <h3>Smart Flashcard Creation</h3>
+                    <p>Create custom flashcards with Spanish words, phrases, and verbs with examples</p>
+                </div>
             </div>
-            <div class="feature-card">
-                <h3>Verb Conjugation</h3>
-                <p>View conjugations for all tenses and moods to master Spanish verbs</p>
+            
+            <div class="feature-item">
+                <div class="feature-icon">🔄</div>
+                <div class="feature-content">
+                    <h3>Complete Verb Conjugations</h3>
+                    <p>Master all tenses and moods with comprehensive verb tables</p>
+                </div>
             </div>
-            <div class="feature-card">
-                <h3>Cultural Context</h3>
-                <p>Learn cultural notes and idiomatic expressions for better understanding</p>
+            
+            <div class="feature-item">
+                <div class="feature-icon">🌍</div>
+                <div class="feature-content">
+                    <h3>Rich Cultural Context</h3>
+                    <p>Learn cultural notes and idiomatic expressions for authentic understanding</p>
+                </div>
             </div>
-            <div class="feature-card">
-                <h3>Text-to-Speech</h3>
-                <p>Listen to pronunciations to improve your speaking skills</p>
+            
+            <div class="feature-item">
+                <div class="feature-icon">⏱️</div>
+                <div class="feature-content">
+                    <h3>Spaced Repetition System</h3>
+                    <p>Study cards at scientifically optimized intervals for maximum retention</p>
+                </div>
             </div>
         </div>
     </section>
@@ -98,32 +113,57 @@
         background: #e2e6ea;
     }
     
-    .features {
-        padding: 2rem 1rem;
+    .features-section {
+        padding: 3rem 1rem;
+        background-color: #f9f9f9;
+        border-radius: 12px;
+        margin: 2rem 1rem;
     }
     
     h2 {
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 3rem;
         color: #333;
+        font-size: 2rem;
     }
     
-    .feature-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    .features-container {
+        display: flex;
+        flex-direction: column;
         gap: 2rem;
+        max-width: 900px;
+        margin: 0 auto;
     }
     
-    .feature-card {
-        background: #f8f9fa;
-        border-radius: 8px;
+    .feature-item {
+        display: flex;
+        background: white;
+        border-radius: 12px;
         padding: 1.5rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .feature-item:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.12);
+    }
+    
+    .feature-icon {
+        font-size: 2.5rem;
+        margin-right: 1.5rem;
+        display: flex;
+        align-items: center;
+    }
+    
+    .feature-content {
+        flex: 1;
     }
     
     h3 {
         color: #007bff;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.75rem;
+        font-size: 1.3rem;
     }
     
     @media (max-width: 768px) {
@@ -132,8 +172,20 @@
             align-items: center;
         }
         
-        .feature-grid {
-            grid-template-columns: 1fr;
+        .feature-item {
+            flex-direction: column;
+            text-align: center;
+        }
+        
+        .feature-icon {
+            margin-right: 0;
+            margin-bottom: 1rem;
+            justify-content: center;
+        }
+        
+        .features-section {
+            padding: 2rem 1rem;
+            margin: 1rem 0.5rem;
         }
     }
 </style>

@@ -3,46 +3,40 @@
     import { navigate, Link } from 'svelte-routing';
     import { apiFetch } from '../lib/api.js';
     import DeckList from '../components/DeckList.svelte';
+    import { decks } from '../lib/stores.js';
     
-    // Mock decks data
-    let mockDecks = [
-        {
-            id: '1',
-            name: 'Spanish Verbs',
-            description: 'Common Spanish verbs with conjugations',
-            cardCount: 25,
-            lastReviewed: '2025-03-20'
-        },
-        {
-            id: '2',
-            name: 'Food Vocabulary',
-            description: 'Words related to food and dining',
-            cardCount: 18,
-            lastReviewed: '2025-03-22'
-        },
-        {
-            id: '3',
-            name: 'Travel Phrases',
-            description: 'Useful phrases for traveling',
-            cardCount: 15,
-            lastReviewed: '2025-03-18'
-        }
-    ];
-    
-    let decks = [];
+    let decksList = [];
     let newDeckName = '';
     let newDeckDescription = '';
     let loading = true;
     let error = null;
     let showAddDeckForm = false;
     
-    // Load data on mount
+    // Function to refresh decks list from localStorage
+    function refreshDecksList() {
+        decksList = decks.getAllDecks();
+        loading = false;
+        console.log('Refreshed decks in DeckManagement:', decksList);
+    }
+    
+    // Get the initial decks list
+    refreshDecksList();
+    
+    // Subscribe to the decks store for updates
+    const unsubscribe = decks.subscribe(value => {
+        decksList = [...value]; // Create a new array to ensure reactivity
+        loading = false;
+        console.log('Decks updated in DeckManagement via subscription:', decksList);
+    });
+    
+    // Clean up subscription on component destruction
     onMount(() => {
-        // Load mock decks after a short delay to simulate API call
-        setTimeout(() => {
-            decks = [...mockDecks];
-            loading = false;
-        }, 800);
+        // Force refresh the decks list from localStorage on component mount
+        refreshDecksList();
+        
+        return () => {
+            unsubscribe();
+        };
     });
     
     function toggleAddDeckForm() {
@@ -58,32 +52,41 @@
         if (!newDeckName.trim()) return;
         
         try {
-            // Create a new mock deck
-            const newDeck = {
-                id: Date.now().toString(),
-                name: newDeckName,
-                description: newDeckDescription || 'No description provided',
-                cardCount: 0,
-                lastReviewed: 'Never'
-            };
+            console.log('Creating new deck:', newDeckName);
             
-            // Add to decks list
-            decks = [...decks, newDeck];
+            // Create a new deck using the store and get the new deck object
+            const newDeck = decks.addDeck({
+                name: newDeckName,
+                description: newDeckDescription || 'No description provided'
+            });
+            
+            console.log('New deck created:', newDeck);
             
             // Reset form
             newDeckName = '';
             newDeckDescription = '';
             showAddDeckForm = false;
+            
+            // Force refresh the decks list from localStorage
+            refreshDecksList();
+            
+            // Add a small delay to ensure the UI updates
+            setTimeout(() => {
+                refreshDecksList();
+            }, 100);
+            
         } catch (err) {
             error = err.message;
+            console.error('Error creating deck:', err);
         }
     }
     
     function deleteDeck(deckId) {
-        decks = decks.filter(deck => deck.id !== deckId);
+        decks.deleteDeck(deckId);
     }
     
     function addCardsToDeck(deckId) {
+        console.log('Navigating to create flashcards with deck ID:', deckId);
         // Navigate to the create flashcards page with the deck ID
         navigate(`/create?deckId=${deckId}`);
     }
@@ -144,7 +147,7 @@
             <p>Error loading decks: {error}</p>
             <button on:click={() => { loading = true; error = null; }}>Try Again</button>
         </div>
-    {:else if decks.length === 0}
+    {:else if decksList.length === 0}
         <div class="empty-state">
             <h2>You don't have any decks yet</h2>
             <p>Create your first flashcard deck to start learning!</p>
@@ -152,7 +155,7 @@
         </div>
     {:else}
         <div class="decks-grid">
-            {#each decks as deck (deck.id)}
+            {#each decksList as deck (deck.id)}
                 <div class="deck-card">
                     <div class="deck-info">
                         <h3>{deck.name}</h3>
