@@ -106,11 +106,27 @@
         }
     });
     
-    function flipCard() {
+    function toggleFlip(e) {
+        // Prevent default if it's a keyboard event
+        if (e && e.preventDefault) {
+            e.preventDefault();
+        }
         showAnswer = !showAnswer;
+        console.log('Card flipped, showAnswer:', showAnswer);
+    }
+
+    function showCardAnswer() {
+        showAnswer = true;
+        console.log('Showing answer, showAnswer:', showAnswer);
+    }
+    
+    function hideCardAnswer() {
+        showAnswer = false;
+        console.log('Hiding answer, showAnswer:', showAnswer);
     }
     
     function markCard(correct) {
+        console.log('markCard called with:', correct);
         // Update card status
         cardStatuses[currentIndex].seen = true;
         
@@ -122,16 +138,19 @@
             incorrectCount++;
         }
         
-        // Move to next card
-        showAnswer = false;
-        
-        if (currentIndex < flashcards.length - 1) {
-            currentIndex++;
-            cardStatuses[currentIndex].seen = true;
-        } else {
-            // Study session complete
-            studyComplete = true;
-        }
+        // Add a small delay before moving to the next card
+        setTimeout(() => {
+            // Move to next card
+            showAnswer = false;
+            
+            if (currentIndex < flashcards.length - 1) {
+                currentIndex++;
+                cardStatuses[currentIndex].seen = true;
+            } else {
+                // Study session complete
+                studyComplete = true;
+            }
+        }, 300);
     }
     
     function restartStudy() {
@@ -211,47 +230,52 @@
             </div>
         </div>
         
+        <!-- Flashcard View (Always visible) -->
         <div class="flashcard-container">
-            <div class="flashcard" class:flipped={showAnswer} on:click={flipCard} on:keydown={(e) => e.key === 'Enter' && flipCard()} tabindex="0" role="button" aria-label="Flip flashcard">
-                <div class="card-side front">
-                    <div class="card-content">
-                        <p class="card-text">{flashcards[currentIndex].frontText}</p>
-                        <p class="card-hint">Click to flip</p>
-                    </div>
-                </div>
-                <div class="card-side back">
-                    <div class="card-content">
-                        <p class="card-text">{flashcards[currentIndex].backText}</p>
-                        
-                        {#if flashcards[currentIndex].examples}
-                            <div class="card-examples">
-                                <h4>Examples:</h4>
-                                <p>{flashcards[currentIndex].examples}</p>
-                            </div>
-                        {/if}
-                        
-                        {#if flashcards[currentIndex].notes}
-                            <div class="card-notes">
-                                <h4>Notes:</h4>
-                                <p>{flashcards[currentIndex].notes}</p>
-                            </div>
-                        {/if}
-                    </div>
-                </div>
+            <div 
+              class="flashcard" 
+              class:flipped={showAnswer}
+              on:click={toggleFlip}
+              on:keydown={e => e.key === 'Enter' && toggleFlip(e)}
+              tabindex="0"
+              role="button"
+              aria-label="Flashcard, press Enter to flip"
+            >
+              <!-- Front (Question) -->
+              <div class="flashcard-front">
+                <p class="card-text">{flashcards[currentIndex].frontText}</p>
+                <button class="show-answer-button" on:click|stopPropagation={showCardAnswer}>
+                  Show Answer
+                </button>
+              </div>
+              
+              <!-- Back (Answer) -->
+              <div class="flashcard-back">
+                <p class="card-text">{flashcards[currentIndex].backText}</p>
+                {#if flashcards[currentIndex].examples}
+                  <div class="card-examples">
+                    <h4>Examples:</h4>
+                    <p>{flashcards[currentIndex].examples}</p>
+                  </div>
+                {/if}
+              </div>
             </div>
         </div>
         
+        <!-- Rating Section (Only visible when answer is shown) -->
         {#if showAnswer}
-            <div class="rating-buttons">
-                <button class="incorrect-button" on:click={() => markCard(false)}>
-                    Incorrect
-                </button>
-                <button class="correct-button" on:click={() => markCard(true)}>
-                    Correct
-                </button>
+            <div class="rating-section">
+                <h3>How did you do?</h3>
+                <div class="rating-buttons">
+                    <button class="incorrect-button" on:click={() => markCard(false)}>
+                        I Got It Wrong
+                    </button>
+                    <button class="correct-button" on:click={() => markCard(true)}>
+                        I Got It Right
+                    </button>
+                </div>
             </div>
         {/if}
-        
         <div class="card-navigation">
             {#each cardStatuses as status, i}
                 <div 
@@ -309,46 +333,73 @@
         color: #6c757d;
     }
     
-    .flashcard-container {
-        perspective: 1000px;
-        margin-bottom: 2rem;
-    }
-    
     .flashcard {
-        position: relative;
         width: 100%;
         height: 300px;
-        cursor: pointer;
+        position: relative;
         transform-style: preserve-3d;
         transition: transform 0.6s;
+        cursor: pointer;
+        perspective: 1000px;
     }
-    
+
     .flashcard.flipped {
         transform: rotateY(180deg);
     }
     
-    .card-side {
+    .flashcard-front, .flashcard-back {
         position: absolute;
         width: 100%;
         height: 100%;
         backface-visibility: hidden;
+        -webkit-backface-visibility: hidden; /* Safari support */
         border-radius: 8px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        display: flex;
-        align-items: center;
-        justify-content: center;
         padding: 2rem;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background: white;
     }
     
-    .front {
-        background-color: #ffffff;
-        border: 2px solid #007bff;
-    }
-    
-    .back {
-        background-color: #ffffff;
-        border: 2px solid #28a745;
+    .flashcard-back {
         transform: rotateY(180deg);
+        border-left: 4px solid #28a745;
+    }
+    
+    @keyframes flipIn {
+        0% { transform: rotateY(90deg); opacity: 0; }
+        100% { transform: rotateY(0deg); opacity: 1; }
+    }
+    
+    /* Ensure proper 3D rendering in different browsers */
+    .flashcard-container {
+        perspective: 1000px;
+        width: 100%;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    
+    .card-actions {
+        display: flex;
+        justify-content: center;
+        margin-top: 2rem;
+    }
+    
+    .show-answer-button {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 0.75rem 1.5rem;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+    
+    .show-answer-button:hover {
+        background-color: #0069d9;
     }
     
     .card-content {
@@ -380,20 +431,61 @@
         font-size: 1rem;
     }
     
+    .study-card-container {
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 2rem;
+        position: relative;
+    }
+    
+    .rating-section {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 2rem;
+        text-align: center;
+        margin-top: 2rem;
+        position: relative;
+        z-index: 20;
+        animation: fadeIn 0.5s ease-in-out;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .rating-section h3 {
+        margin-top: 0;
+        margin-bottom: 1.5rem;
+        color: #333;
+    }
+    
     .rating-buttons {
         display: flex;
         justify-content: center;
         gap: 2rem;
-        margin-bottom: 2rem;
     }
     
     .correct-button, .incorrect-button {
-        padding: 0.75rem 1.5rem;
+        padding: 1rem 2rem;
         border-radius: 4px;
-        font-weight: 500;
+        font-weight: 600;
+        font-size: 1.1rem;
         cursor: pointer;
         transition: all 0.3s ease;
         border: none;
+        position: relative;
+        z-index: 30;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    
+    .correct-button:not([disabled]), .incorrect-button:not([disabled]) {
+        cursor: pointer;
+    }
+    
+    .correct-button[disabled], .incorrect-button[disabled] {
+        cursor: not-allowed;
+        opacity: 0.5;
     }
     
     .correct-button {
@@ -561,7 +653,8 @@
     
     @media (max-width: 768px) {
         .flashcard {
-            height: 250px;
+            min-height: 200px;
+            height: auto;
         }
         
         .card-text {
@@ -569,6 +662,11 @@
         }
         
         .study-stats {
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .rating-buttons {
             flex-direction: column;
             gap: 1rem;
         }
