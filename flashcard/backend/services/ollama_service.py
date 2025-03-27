@@ -11,7 +11,7 @@ class OllamaService:
     def __init__(self, base_url: str = "http://localhost:11434"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api/generate"
-        self.model = "llama3"  # Default model
+        self.model = "mistral"  # Default model based on available models
     
     def set_model(self, model_name: str):
         """Set the model to use for generation."""
