@@ -1,10 +1,13 @@
 <script>
     import { Link } from 'svelte-routing';
+    import SpainFlag from '../lib/components/SpainFlag.svelte';
 </script>
 
 <div class="home-container">
     <section class="hero">
-        <h1>Language Learning Flashcard Generator</h1>
+        <div class="title-container">
+            <h1><SpainFlag size={32} /> Language Learning Flashcards <SpainFlag size={32} /></h1>
+        </div>
         <p class="subtitle">Master Spanish vocabulary, verbs, and phrases with our intelligent flashcard system</p>
         
         <div class="cta-buttons">
@@ -63,9 +66,17 @@
         margin-bottom: 2rem;
     }
     
+    .title-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    
     h1 {
         font-size: 2.5rem;
-        margin-bottom: 1rem;
+        margin-bottom: 0;
         color: #333;
     }
     

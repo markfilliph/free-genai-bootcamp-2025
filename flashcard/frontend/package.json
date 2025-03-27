@@ -2,7 +2,7 @@
   "name": "flashcard-frontend",
   "version": "1.0.0",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --port 8080",
     "build": "vite build",
     "preview": "vite preview",
     "test": "jest",

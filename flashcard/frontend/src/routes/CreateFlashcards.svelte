@@ -2,6 +2,7 @@
     import { navigate } from 'svelte-routing';
     import { onMount } from 'svelte';
     import { decks, flashcards } from '../lib/stores.js';
+    import * as api from '../lib/api.js';
     
     // Flashcard data
     let frontText = '';
@@ -15,6 +16,12 @@
     let selectedDeckName = '';
     let createdFlashcards = [];
     let decksList = [];
+    
+    // AI generation states
+    let isGeneratingExamples = false;
+    let isGeneratingNotes = false;
+    let isVerb = false; // Toggle for verb conjugation
+    let generationError = null;
     
     // Function to refresh decks list from localStorage
     function refreshDecksList() {
@@ -77,6 +84,79 @@
         return true;
     }
     
+    // AI Generation functions
+    async function generateExamples() {
+        if (!frontText) {
+            generationError = 'Please enter a Spanish word first';
+            return;
+        }
+        
+        generationError = null;
+        isGeneratingExamples = true;
+        
+        try {
+            const generatedExamples = await api.generateExampleSentences(frontText);
+            if (generatedExamples && generatedExamples.length > 0) {
+                examples = generatedExamples.join('\n');
+            } else {
+                generationError = 'No examples generated. Please try again.';
+            }
+        } catch (err) {
+            console.error('Error generating examples:', err);
+            generationError = `Failed to generate examples: ${err.message}`;
+        } finally {
+            isGeneratingExamples = false;
+        }
+    }
+    
+    async function generateCulturalNotes() {
+        if (!frontText) {
+            generationError = 'Please enter a Spanish word first';
+            return;
+        }
+        
+        generationError = null;
+        isGeneratingNotes = true;
+        
+        try {
+            const culturalNote = await api.generateCulturalNote(frontText);
+            if (culturalNote) {
+                notes = culturalNote;
+            } else {
+                generationError = 'No cultural notes generated. Please try again.';
+            }
+        } catch (err) {
+            console.error('Error generating cultural notes:', err);
+            generationError = `Failed to generate cultural notes: ${err.message}`;
+        } finally {
+            isGeneratingNotes = false;
+        }
+    }
+    
+    async function generateVerbConjugations() {
+        if (!frontText) {
+            generationError = 'Please enter a Spanish verb first';
+            return;
+        }
+        
+        generationError = null;
+        isGeneratingNotes = true;
+        
+        try {
+            const conjugations = await api.generateVerbConjugations(frontText);
+            if (conjugations) {
+                notes = `Verb Conjugations:\n${conjugations}`;
+            } else {
+                generationError = 'No conjugations generated. Please try again.';
+            }
+        } catch (err) {
+            console.error('Error generating conjugations:', err);
+            generationError = `Failed to generate conjugations: ${err.message}`;
+        } finally {
+            isGeneratingNotes = false;
+        }
+    }
+    
     // Create a new flashcard
     async function createFlashcard() {
         error = null;
@@ -112,6 +192,7 @@
                 backText = '';
                 examples = '';
                 notes = '';
+                isVerb = false;
                 success = false;
             }, 2000);
         } catch (err) {
@@ -224,7 +305,21 @@
                 
                 <div class="form-column">
                     <div class="form-group">
-                        <label for="examples">Examples (Optional)</label>
+                        <div class="label-with-button">
+                            <label for="examples">Examples (Optional)</label>
+                            <button 
+                                type="button" 
+                                class="ai-generate-button" 
+                                on:click={generateExamples}
+                                disabled={isGeneratingExamples || !frontText}
+                            >
+                                {#if isGeneratingExamples}
+                                    Generating...
+                                {:else}
+                                    Generate with AI
+                                {/if}
+                            </button>
+                        </div>
                         <textarea 
                             id="examples" 
                             bind:value={examples} 
@@ -234,7 +329,31 @@
                     </div>
                     
                     <div class="form-group">
-                        <label for="notes">Notes (Optional)</label>
+                        <div class="label-with-button">
+                            <label for="notes">Notes (Optional)</label>
+                            <div class="ai-buttons-group">
+                                <button 
+                                    type="button" 
+                                    class="ai-generate-button" 
+                                    on:click={generateCulturalNotes}
+                                    disabled={isGeneratingNotes || !frontText}
+                                >
+                                    {#if isGeneratingNotes}
+                                        Generating...
+                                    {:else}
+                                        Cultural Notes
+                                    {/if}
+                                </button>
+                                <button 
+                                    type="button" 
+                                    class="ai-generate-button" 
+                                    on:click={generateVerbConjugations}
+                                    disabled={isGeneratingNotes || !frontText}
+                                >
+                                    Verb Conjugations
+                                </button>
+                            </div>
+                        </div>
                         <textarea 
                             id="notes" 
                             bind:value={notes} 
@@ -248,6 +367,12 @@
             {#if error}
                 <div class="error-message" role="alert">
                     {error}
+                </div>
+            {/if}
+            
+            {#if generationError}
+                <div class="error-message" role="alert">
+                    <strong>AI Generation Error:</strong> {generationError}
                 </div>
             {/if}
             
@@ -530,5 +655,38 @@
         .card-side {
             height: 150px;
         }
+    }
+    
+    /* AI Generation Buttons Styles */
+    .label-with-button {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 5px;
+    }
+    
+    .ai-generate-button {
+        font-size: 0.8rem;
+        padding: 4px 8px;
+        background-color: #4a6fa5;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    
+    .ai-generate-button:hover:not(:disabled) {
+        background-color: #3a5a8a;
+    }
+    
+    .ai-generate-button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+    }
+    
+    .ai-buttons-group {
+        display: flex;
+        gap: 5px;
     }
 </style>

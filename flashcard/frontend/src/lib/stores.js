@@ -45,12 +45,91 @@ const initialFlashcards = {
     ]
 };
 
-// Create global shared data that will be accessible across components
-// This is a simple approach that ensures data consistency
-let globalDecks = [...initialDecks];
-let globalFlashcards = {...initialFlashcards};
+// Check if localStorage is available (browser environment)
+const isLocalStorageAvailable = typeof window !== 'undefined' && window.localStorage;
 
-// Create a custom store with global data
+// Helper function to check if localStorage is actually working
+function testLocalStorage() {
+    if (!isLocalStorageAvailable) return false;
+    
+    try {
+        localStorage.setItem('test', 'test');
+        const testValue = localStorage.getItem('test');
+        localStorage.removeItem('test');
+        return testValue === 'test';
+    } catch (e) {
+        console.error('localStorage test failed:', e);
+        return false;
+    }
+}
+
+// Flag to indicate if localStorage is working
+const localStorageWorks = testLocalStorage();
+
+// Load data from localStorage or use initial data
+let savedDecks;
+let savedFlashcards;
+
+if (localStorageWorks) {
+    try {
+        const storedDecks = localStorage.getItem('flashcardDecks');
+        const storedFlashcards = localStorage.getItem('flashcardCards');
+        
+        if (storedDecks && storedFlashcards) {
+            try {
+                savedDecks = JSON.parse(storedDecks);
+                savedFlashcards = JSON.parse(storedFlashcards);
+                console.log('Loaded from localStorage:', { decks: savedDecks, flashcards: savedFlashcards });
+            } catch (parseError) {
+                console.error('Error parsing localStorage data:', parseError);
+                savedDecks = initialDecks;
+                savedFlashcards = initialFlashcards;
+            }
+        } else {
+            console.log('No data found in localStorage, using initial data');
+            savedDecks = initialDecks;
+            savedFlashcards = initialFlashcards;
+        }
+    } catch (error) {
+        console.error('Error accessing localStorage:', error);
+        savedDecks = initialDecks;
+        savedFlashcards = initialFlashcards;
+    }
+} else {
+    console.warn('localStorage is not available or not working, using initial data');
+    savedDecks = initialDecks;
+    savedFlashcards = initialFlashcards;
+}
+
+// Create global shared data that will be accessible across components
+let globalDecks = [...savedDecks];
+let globalFlashcards = {...savedFlashcards};
+
+// Function to save data to localStorage
+function saveToLocalStorage() {
+    if (localStorageWorks) {
+        try {
+            // Create string versions first to catch any serialization errors
+            const decksString = JSON.stringify(globalDecks);
+            const flashcardsString = JSON.stringify(globalFlashcards);
+            
+            // Only proceed if serialization was successful
+            if (decksString && flashcardsString) {
+                localStorage.setItem('flashcardDecks', decksString);
+                localStorage.setItem('flashcardCards', flashcardsString);
+                console.log('Saved to localStorage successfully');
+            } else {
+                console.error('Failed to serialize data for localStorage');
+            }
+        } catch (error) {
+            console.error('Error saving to localStorage:', error);
+        }
+    } else {
+        console.warn('localStorage is not available or not working, data will not persist');
+    }
+}
+
+// Create a custom store with global data and localStorage persistence
 function createStore(initialData, globalRef) {
     // Initialize the global reference if it's empty
     if (globalRef === globalDecks && globalDecks.length === 0) {
@@ -61,12 +140,14 @@ function createStore(initialData, globalRef) {
     
     const store = writable(globalRef);
     
-    // Subscribe to changes and update the global reference
+    // Subscribe to changes and update the global reference and localStorage
     store.subscribe(value => {
         if (globalRef === globalDecks) {
             globalDecks = value;
+            saveToLocalStorage();
         } else if (globalRef === globalFlashcards) {
             globalFlashcards = value;
+            saveToLocalStorage();
         }
     });
     
@@ -100,8 +181,9 @@ export const decks = {
         // Add to global data
         globalDecks = [...globalDecks, newDeck];
         
-        // Update the store
+        // Update the store and save to localStorage
         decksStore.set(globalDecks);
+        saveToLocalStorage();
         
         return newDeck;
     },
@@ -114,8 +196,9 @@ export const decks = {
             deck.id === id ? { ...deck, ...data } : deck
         );
         
-        // Update the store
+        // Update the store and save to localStorage
         decksStore.set(globalDecks);
+        saveToLocalStorage();
     },
     
     deleteDeck: (id) => {
@@ -129,9 +212,10 @@ export const decks = {
             delete globalFlashcards[id];
         }
         
-        // Update the stores
+        // Update the stores and save to localStorage
         decksStore.set(globalDecks);
         flashcardsStore.set(globalFlashcards);
+        saveToLocalStorage();
     },
     
     getAllDecks: () => globalDecks,
@@ -139,6 +223,7 @@ export const decks = {
     reset: () => {
         globalDecks = [...initialDecks];
         decksStore.set(globalDecks);
+        saveToLocalStorage();
     }
 };
 
@@ -163,8 +248,9 @@ export const flashcards = {
         // Add to global data
         globalFlashcards[deckId] = [...globalFlashcards[deckId], newCard];
         
-        // Update the store
+        // Update the store and save to localStorage
         flashcardsStore.set(globalFlashcards);
+        saveToLocalStorage();
         
         // Update the deck's card count
         const deckCards = globalFlashcards[deckId] || [];
@@ -187,8 +273,9 @@ export const flashcards = {
                 card => card.id !== cardId
             );
             
-            // Update the store
+            // Update the store and save to localStorage
             flashcardsStore.set(globalFlashcards);
+            saveToLocalStorage();
             
             // Update the deck's card count
             const deckCards = globalFlashcards[deckId] || [];
@@ -199,5 +286,6 @@ export const flashcards = {
     reset: () => {
         globalFlashcards = {...initialFlashcards};
         flashcardsStore.set(globalFlashcards);
+        saveToLocalStorage();
     }
 };
