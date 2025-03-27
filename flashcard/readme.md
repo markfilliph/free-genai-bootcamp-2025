@@ -7,7 +7,7 @@ The Language Learning Flashcard Generator is an app designed to help learners of
 - **Flashcard Creation**: Generate example sentences, verb conjugations, and translations.
 - **Verb Conjugation Support**: Conjugations for all tenses and moods.
 - **Cultural Context**: Cultural notes and idiomatic expressions.
-- **Text-to-Speech (TTS)**: Listen to pronunciations using ResponsiveVoice.js.
+- **Text-to-Speech (TTS)**: Listen to pronunciations using ResponsiveVoice.js. (not deployed)
 - **Flashcard Organization**: Organize flashcards into decks and tag them.
 - **Review Mode**: Spaced repetition system (SRS) using SuperMemo2.
 - **Export Flashcards**: Export as PDF or CSV.

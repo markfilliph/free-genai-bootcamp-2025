@@ -27,7 +27,7 @@ The frontend of the Language Learning Flashcard Generator is built using **Svelt
    - Show cultural notes and idiomatic expressions.
 
 4. **Text-to-Speech (TTS)**:
-   - Users can listen to pronunciations using ResponsiveVoice.js.
+   - Users can listen to pronunciations using ResponsiveVoice.js. (not deployed)
 
 5. **Flashcard Organization**:
    - Organize flashcards into decks and tag them.
