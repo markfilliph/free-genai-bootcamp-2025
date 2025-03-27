@@ -1,10 +1,6 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from pydantic import BaseModel, Field, EmailStr
+from typing import Optional, List, Annotated
 from datetime import datetime
-
-# Use str instead of EmailStr for compatibility
-class EmailStr(str):
-    pass
 
 # User schemas
 class UserBase(BaseModel):
@@ -20,6 +16,7 @@ class User(UserBase):
     
     class Config:
         orm_mode = True
+        from_attributes = True
 
 # Deck schemas
 class DeckBase(BaseModel):
@@ -35,6 +32,7 @@ class Deck(DeckBase):
     
     class Config:
         orm_mode = True
+        from_attributes = True
 
 # Flashcard schemas
 class FlashcardBase(BaseModel):
@@ -57,6 +55,7 @@ class Flashcard(FlashcardBase):
     
     class Config:
         orm_mode = True
+        from_attributes = True
 
 # Tag schemas
 class TagBase(BaseModel):
@@ -70,6 +69,7 @@ class Tag(TagBase):
     
     class Config:
         orm_mode = True
+        from_attributes = True
 
 # LLM Generation schemas
 class GenerationRequest(BaseModel):

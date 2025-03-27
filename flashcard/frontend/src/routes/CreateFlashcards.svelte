@@ -451,7 +451,10 @@
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         padding: 1rem;
-        transition: transform 0.2s ease;
+        transition: all 0.3s ease;
+        min-height: 100px;
+        max-height: 300px;
+        overflow-y: auto;
     }
     
     .flashcard-item:hover {
@@ -521,6 +524,12 @@
         font-size: 1rem;
     }
     
+    textarea {
+        max-height: 150px;
+        overflow-y: auto;
+        resize: vertical;
+    }
+    
     input:focus, textarea:focus, select:focus {
         outline: none;
         border-color: #007bff;
@@ -584,6 +593,9 @@
         margin-top: 1rem;
         font-size: 0.9rem;
         text-align: left;
+        max-height: 120px;
+        overflow-y: auto;
+        padding-right: 5px;
     }
     
     .examples h4, .notes h4 {

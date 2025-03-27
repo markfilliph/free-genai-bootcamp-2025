@@ -1,4 +1,4 @@
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
 export async function apiFetch(path, options = {}) {
     try {
@@ -92,10 +92,18 @@ export async function deleteFlashcard(deckId, cardId) {
 
 // AI Generation functions
 export async function generateContent(word, isVerb = false) {
-    return apiFetch('/api/generate', {
-        method: 'POST',
-        body: JSON.stringify({ word, is_verb: isVerb })
-    });
+    console.log('Calling generateContent API with:', { word, is_verb: isVerb });
+    try {
+        const result = await apiFetch('/api/generate', {
+            method: 'POST',
+            body: JSON.stringify({ word, is_verb: isVerb })
+        });
+        console.log('Generate content API response:', result);
+        return result;
+    } catch (error) {
+        console.error('Generate content API error:', error);
+        throw error;
+    }
 }
 
 export async function generateExampleSentences(word) {

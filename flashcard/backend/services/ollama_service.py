@@ -17,11 +17,12 @@ class OllamaService:
         """Set the model to use for generation."""
         self.model = model_name
     
-    async def generate_example_sentences(self, word: str, count: int = 3) -> List[str]:
+    async def generate_example_sentences(self, word: str, count: int = 2) -> List[str]:
         """Generate example sentences for a Spanish word."""
-        prompt = f"""Generate {count} example sentences in Spanish using the word '{word}'. 
+        prompt = f"""Generate {count} short example sentences in Spanish using the word '{word}'. 
         Each sentence should be natural, conversational, and demonstrate proper usage of the word.
-        For each sentence, also provide an English translation.
+        Keep sentences brief (under 10 words if possible).
+        For each sentence, also provide a short English translation.
         Format the output as a JSON array of objects with 'spanish' and 'english' keys.
         """
         
@@ -47,17 +48,19 @@ class OllamaService:
     
     async def generate_verb_conjugations(self, verb: str) -> str:
         """Generate verb conjugations for a Spanish verb."""
-        prompt = f"""Generate the conjugation table for the Spanish verb '{verb}' in present, preterite, 
-        imperfect, future, and conditional tenses. Format it in a clear, readable way with tense names as headers.
+        prompt = f"""Generate a compact conjugation summary for the Spanish verb '{verb}'.
+        Include only present tense conjugations (yo, tú, él/ella, nosotros, vosotros, ellos/ellas).
+        Format it in a very concise way, one line per conjugation.
+        Keep the entire output under 200 characters if possible.
         """
         
         return self._call_ollama(prompt)
     
     async def generate_cultural_note(self, word: str) -> str:
         """Generate cultural context or note for a Spanish word or phrase."""
-        prompt = f"""Provide a brief cultural note or context about the Spanish word '{word}'. 
-        Include any regional variations, idiomatic usage, or cultural significance.
-        Keep it concise but informative, around 2-3 sentences.
+        prompt = f"""Provide an extremely brief cultural note about the Spanish word '{word}'.
+        Include only the most essential information about regional usage or cultural significance.
+        Keep it to a single short sentence, strictly under 50 characters total.
         """
         
         return self._call_ollama(prompt)
