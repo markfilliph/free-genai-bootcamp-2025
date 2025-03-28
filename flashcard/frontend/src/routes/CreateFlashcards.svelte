@@ -404,8 +404,22 @@
                         {#each createdFlashcards as flashcard}
                             <div class="flashcard-item">
                                 <div class="flashcard-content">
-                                    <div class="flashcard-front">{flashcard.frontText}</div>
-                                    <div class="flashcard-back">{flashcard.backText}</div>
+                                    <div class="flashcard-front"><p>{flashcard.frontText}</p></div>
+                                    <div class="flashcard-back">
+                                        <p>{flashcard.backText}</p>
+                                        {#if flashcard.examples}
+                                            <div class="examples">
+                                                <h4>Examples:</h4>
+                                                <p>{flashcard.examples}</p>
+                                            </div>
+                                        {/if}
+                                        {#if flashcard.notes}
+                                            <div class="notes">
+                                                <h4>Notes:</h4>
+                                                <p>{flashcard.notes}</p>
+                                            </div>
+                                        {/if}
+                                    </div>
                                 </div>
                                 <div class="flashcard-meta">
                                     Created: {new Date(flashcard.createdAt).toLocaleString()}
@@ -455,6 +469,11 @@
         min-height: 100px;
         max-height: 300px;
         overflow-y: auto;
+    }
+    
+    .flashcard-item p {
+        margin: 0;
+        line-height: 1.2;
     }
     
     .flashcard-item:hover {
@@ -554,15 +573,17 @@
     
     .card-side {
         flex: 1;
-        height: 200px;
+        min-height: 200px;
+        max-height: 300px;
         border-radius: 8px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
         padding: 1rem;
         text-align: center;
         transition: all 0.3s ease;
+        overflow-y: auto;
     }
     
     .front {
@@ -590,7 +611,7 @@
     }
     
     .examples, .notes {
-        margin-top: 1rem;
+        margin-top: 0.5rem;
         font-size: 0.9rem;
         text-align: left;
         max-height: 120px;
@@ -598,9 +619,16 @@
         padding-right: 5px;
     }
     
+    .examples p, .notes p {
+        margin: 0;
+        line-height: 1.2;
+        white-space: pre-line;
+    }
+    
     .examples h4, .notes h4 {
-        margin: 0 0 0.25rem 0;
+        margin: 0 0 0.1rem 0;
         color: #6c757d;
+        font-size: 0.8rem;
     }
     
     .form-actions {

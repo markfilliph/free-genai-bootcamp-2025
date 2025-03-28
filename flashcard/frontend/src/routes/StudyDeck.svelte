@@ -113,6 +113,11 @@
             } else {
                 // Study session complete
                 studyComplete = true;
+                
+                // Update the last studied date for the deck
+                const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+                decks.updateDeck(deckId, { lastReviewed: today });
+                console.log(`Updated last studied date for deck ${deckId} to ${today}`);
             }
         }, 300);
     }
@@ -222,6 +227,12 @@
                     <p>{deckCards[currentIndex].examples}</p>
                   </div>
                 {/if}
+                {#if deckCards[currentIndex].notes}
+                  <div class="card-examples">
+                    <h4>Notes:</h4>
+                    <p>{deckCards[currentIndex].notes}</p>
+                  </div>
+                {/if}
               </div>
             </div>
         </div>
@@ -299,7 +310,7 @@
     
     .flashcard {
         width: 100%;
-        height: 300px;
+        height: 350px;
         position: relative;
         transform-style: preserve-3d;
         transition: transform 0.6s;
@@ -318,13 +329,14 @@
         backface-visibility: hidden;
         -webkit-backface-visibility: hidden; /* Safari support */
         border-radius: 8px;
-        padding: 2rem;
+        padding: 1.5rem;
         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
         background: white;
+        overflow-y: auto;
     }
     
     .flashcard-back {
@@ -345,11 +357,7 @@
         margin: 0 auto;
     }
     
-    .card-actions {
-        display: flex;
-        justify-content: center;
-        margin-top: 2rem;
-    }
+
     
     .show-answer-button {
         background-color: #007bff;
@@ -366,41 +374,40 @@
         background-color: #0069d9;
     }
     
-    .card-content {
-        width: 100%;
-        text-align: center;
-    }
+
     
     .card-text {
         font-size: 2rem;
-        margin-bottom: 1rem;
+        margin-bottom: 0.75rem;
         color: #333;
+        text-align: center;
+        width: 100%;
     }
     
-    .card-hint {
-        font-size: 0.9rem;
-        color: #6c757d;
-        font-style: italic;
-    }
+
     
-    .card-examples, .card-notes {
-        margin-top: 1.5rem;
-        text-align: left;
+    .card-examples {
+        margin-top: 0.75rem;
+        text-align: center;
         font-size: 1rem;
+        width: 100%;
+        line-height: 1.3;
     }
     
-    .card-examples h4, .card-notes h4 {
-        margin: 0 0 0.5rem 0;
+    .card-examples p {
+        margin: 0;
+        white-space: pre-line;
+    }
+    
+    .card-examples h4 {
+        margin: 0 0 0.3rem 0;
         color: #6c757d;
         font-size: 1rem;
+        font-weight: 600;
+        text-align: center;
     }
     
-    .study-card-container {
-        display: flex;
-        flex-direction: column;
-        margin-bottom: 2rem;
-        position: relative;
-    }
+
     
     .rating-section {
         background-color: #f8f9fa;
@@ -447,10 +454,7 @@
         cursor: pointer;
     }
     
-    .correct-button[disabled], .incorrect-button[disabled] {
-        cursor: not-allowed;
-        opacity: 0.5;
-    }
+
     
     .correct-button {
         background: #28a745;

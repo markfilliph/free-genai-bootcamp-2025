@@ -21,7 +21,7 @@ class OllamaService:
         """Generate example sentences for a Spanish word."""
         prompt = f"""Generate {count} short example sentences in Spanish using the word '{word}'. 
         Each sentence should be natural, conversational, and demonstrate proper usage of the word.
-        Keep sentences brief (under 10 words if possible).
+        Keep sentences brief (under 10 words).
         For each sentence, also provide a short English translation.
         Format the output as a JSON array of objects with 'spanish' and 'english' keys.
         """
@@ -51,7 +51,7 @@ class OllamaService:
         prompt = f"""Generate a compact conjugation summary for the Spanish verb '{verb}'.
         Include only present tense conjugations (yo, tú, él/ella, nosotros, vosotros, ellos/ellas).
         Format it in a very concise way, one line per conjugation.
-        Keep the entire output under 200 characters if possible.
+        Keep the entire output under 30 characters if possible.
         """
         
         return self._call_ollama(prompt)
@@ -60,7 +60,7 @@ class OllamaService:
         """Generate cultural context or note for a Spanish word or phrase."""
         prompt = f"""Provide an extremely brief cultural note about the Spanish word '{word}'.
         Include only the most essential information about regional usage or cultural significance.
-        Keep it to a single short sentence, strictly under 50 characters total.
+        Keep it to a single short sentence, strictly under 25 characters total.
         """
         
         return self._call_ollama(prompt)
