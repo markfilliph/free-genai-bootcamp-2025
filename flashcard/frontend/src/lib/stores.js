@@ -45,113 +45,87 @@ const initialFlashcards = {
     ]
 };
 
-// Check if localStorage is available (browser environment)
-const isLocalStorageAvailable = typeof window !== 'undefined' && window.localStorage;
+// Create a singleton store pattern to ensure all components share the same data
+// This is a key improvement to fix the data persistence issue between components
 
-// Helper function to check if localStorage is actually working
-function testLocalStorage() {
-    if (!isLocalStorageAvailable) return false;
-    
-    try {
-        localStorage.setItem('test', 'test');
-        const testValue = localStorage.getItem('test');
-        localStorage.removeItem('test');
-        return testValue === 'test';
-    } catch (e) {
-        console.error('localStorage test failed:', e);
-        return false;
-    }
-}
+// Storage keys
+const DECKS_STORAGE_KEY = 'flashcardDecks';
+const FLASHCARDS_STORAGE_KEY = 'flashcardCards';
 
-// Flag to indicate if localStorage is working
-const localStorageWorks = testLocalStorage();
-
-// Load data from localStorage or use initial data
-let savedDecks;
-let savedFlashcards;
-
-if (localStorageWorks) {
-    try {
-        const storedDecks = localStorage.getItem('flashcardDecks');
-        const storedFlashcards = localStorage.getItem('flashcardCards');
-        
-        if (storedDecks && storedFlashcards) {
-            try {
-                savedDecks = JSON.parse(storedDecks);
-                savedFlashcards = JSON.parse(storedFlashcards);
-                console.log('Loaded from localStorage:', { decks: savedDecks, flashcards: savedFlashcards });
-            } catch (parseError) {
-                console.error('Error parsing localStorage data:', parseError);
-                savedDecks = initialDecks;
-                savedFlashcards = initialFlashcards;
-            }
-        } else {
-            console.log('No data found in localStorage, using initial data');
-            savedDecks = initialDecks;
-            savedFlashcards = initialFlashcards;
-        }
-    } catch (error) {
-        console.error('Error accessing localStorage:', error);
-        savedDecks = initialDecks;
-        savedFlashcards = initialFlashcards;
-    }
-} else {
-    console.warn('localStorage is not available or not working, using initial data');
-    savedDecks = initialDecks;
-    savedFlashcards = initialFlashcards;
-}
-
-// Create global shared data that will be accessible across components
-let globalDecks = [...savedDecks];
-let globalFlashcards = {...savedFlashcards};
-
-// Function to save data to localStorage
-function saveToLocalStorage() {
-    if (localStorageWorks) {
+// Helper function to safely access localStorage
+const storage = {
+    get: (key, defaultValue) => {
         try {
-            // Create string versions first to catch any serialization errors
-            const decksString = JSON.stringify(globalDecks);
-            const flashcardsString = JSON.stringify(globalFlashcards);
-            
-            // Only proceed if serialization was successful
-            if (decksString && flashcardsString) {
-                localStorage.setItem('flashcardDecks', decksString);
-                localStorage.setItem('flashcardCards', flashcardsString);
-                console.log('Saved to localStorage successfully');
-            } else {
-                console.error('Failed to serialize data for localStorage');
+            if (typeof window === 'undefined' || !window.localStorage) {
+                return defaultValue;
             }
-        } catch (error) {
-            console.error('Error saving to localStorage:', error);
+            
+            const value = localStorage.getItem(key);
+            if (!value) return defaultValue;
+            
+            return JSON.parse(value);
+        } catch (e) {
+            console.error(`Error reading ${key} from localStorage:`, e);
+            return defaultValue;
         }
-    } else {
-        console.warn('localStorage is not available or not working, data will not persist');
+    },
+    
+    set: (key, value) => {
+        try {
+            if (typeof window === 'undefined' || !window.localStorage) {
+                return false;
+            }
+            
+            localStorage.setItem(key, JSON.stringify(value));
+            return true;
+        } catch (e) {
+            console.error(`Error writing ${key} to localStorage:`, e);
+            return false;
+        }
     }
-}
+};
 
-// Create a custom store with global data and localStorage persistence
-function createStore(initialData, globalRef) {
-    // Initialize the global reference if it's empty
-    if (globalRef === globalDecks && globalDecks.length === 0) {
-        globalDecks = [...initialData];
-    } else if (globalRef === globalFlashcards && Object.keys(globalFlashcards).length === 0) {
-        globalFlashcards = {...initialData};
-    }
+// Create a custom store factory with persistence
+function createPersistentStore(key, initialValue) {
+    // Get initial data from storage or use provided initial value
+    const storedValue = storage.get(key, initialValue);
     
-    const store = writable(globalRef);
+    // Create the writable store with the initial value
+    const store = writable(storedValue);
     
-    // Subscribe to changes and update the global reference and localStorage
-    store.subscribe(value => {
-        if (globalRef === globalDecks) {
-            globalDecks = value;
-            saveToLocalStorage();
-        } else if (globalRef === globalFlashcards) {
-            globalFlashcards = value;
-            saveToLocalStorage();
+    // Subscribe to changes and update localStorage
+    const { subscribe, set, update } = store;
+    
+    return {
+        subscribe,
+        
+        set: (value) => {
+            // Save to localStorage first
+            storage.set(key, value);
+            // Then update the store
+            set(value);
+            console.log(`Store '${key}' updated:`, value);
+        },
+        
+        update: (updater) => {
+            // Use update to get the current value, modify it, and set it back
+            update(currentValue => {
+                const newValue = updater(currentValue);
+                // Save to localStorage
+                storage.set(key, newValue);
+                console.log(`Store '${key}' updated via updater:`, newValue);
+                return newValue;
+            });
+        },
+        
+        // Force a refresh from localStorage (useful when components mount)
+        refresh: () => {
+            const refreshedValue = storage.get(key, initialValue);
+            set(refreshedValue);
+            console.log(`Store '${key}' refreshed from localStorage:`, refreshedValue);
+            return refreshedValue;
         }
-    });
-    
-    return store;
+    };
 }
 
 // User store
@@ -160,77 +134,88 @@ export const currentUser = writable(null);
 // Active deck store
 export const activeDeck = writable(null);
 
-// Create stores with global data
-const decksStore = createStore(initialDecks, globalDecks);
-const flashcardsStore = createStore(initialFlashcards, globalFlashcards);
+// Create persistent stores
+const decksStore = createPersistentStore(DECKS_STORAGE_KEY, initialDecks);
+const flashcardsStore = createPersistentStore(FLASHCARDS_STORAGE_KEY, initialFlashcards);
 
 // Decks store with methods for adding, updating, and deleting decks
 export const decks = {
+    // Basic store subscription
     subscribe: decksStore.subscribe,
     
+    // Force refresh from localStorage (call this when components mount)
+    refresh: () => decksStore.refresh(),
+    
+    // Add a new deck
     addDeck: (deck) => {
-        const newDeck = {
-            ...deck,
-            id: Date.now().toString(),
-            cardCount: 0,
-            lastReviewed: 'Never'
-        };
+        decksStore.update(currentDecks => {
+            const newDeck = {
+                ...deck,
+                id: Date.now().toString(),
+                cardCount: 0,
+                lastReviewed: 'Never'
+            };
+            
+            console.log('Adding new deck:', newDeck);
+            return [...currentDecks, newDeck];
+        });
         
-        console.log('Adding new deck:', newDeck);
-        
-        // Add to global data
-        globalDecks = [...globalDecks, newDeck];
-        
-        // Update the store and save to localStorage
-        decksStore.set(globalDecks);
-        saveToLocalStorage();
-        
-        return newDeck;
+        // Return the current state after update
+        return decksStore.refresh();
     },
     
+    // Update an existing deck
     updateDeck: (id, data) => {
         console.log('Updating deck:', id, data);
         
-        // Update in global data
-        globalDecks = globalDecks.map(deck => 
-            deck.id === id ? { ...deck, ...data } : deck
-        );
-        
-        // Update the store and save to localStorage
-        decksStore.set(globalDecks);
-        saveToLocalStorage();
+        decksStore.update(currentDecks => {
+            return currentDecks.map(deck => 
+                deck.id === id ? { ...deck, ...data } : deck
+            );
+        });
     },
     
+    // Delete a deck and its flashcards
     deleteDeck: (id) => {
         console.log('Deleting deck:', id);
         
-        // Delete from global data
-        globalDecks = globalDecks.filter(deck => deck.id !== id);
+        // First update the decks store
+        decksStore.update(currentDecks => {
+            return currentDecks.filter(deck => deck.id !== id);
+        });
         
-        // Delete flashcards for this deck
-        if (globalFlashcards[id]) {
-            delete globalFlashcards[id];
-        }
-        
-        // Update the stores and save to localStorage
-        decksStore.set(globalDecks);
-        flashcardsStore.set(globalFlashcards);
-        saveToLocalStorage();
+        // Then remove associated flashcards
+        flashcardsStore.update(currentFlashcards => {
+            const updatedFlashcards = { ...currentFlashcards };
+            if (updatedFlashcards[id]) {
+                delete updatedFlashcards[id];
+            }
+            return updatedFlashcards;
+        });
     },
     
-    getAllDecks: () => globalDecks,
+    // Get all decks
+    getAllDecks: () => {
+        // Force a refresh from localStorage first
+        return decksStore.refresh();
+    },
     
+    // Reset to initial state
     reset: () => {
-        globalDecks = [...initialDecks];
-        decksStore.set(globalDecks);
-        saveToLocalStorage();
+        decksStore.set(initialDecks);
+        flashcardsStore.set(initialFlashcards);
     }
 };
 
 // Flashcards store with methods for adding, updating, and deleting flashcards
 export const flashcards = {
+    // Basic store subscription
     subscribe: flashcardsStore.subscribe,
     
+    // Force refresh from localStorage (call this when components mount)
+    refresh: () => flashcardsStore.refresh(),
+    
+    // Add a new flashcard to a deck
     addFlashcard: (deckId, card) => {
         const newCard = {
             ...card,
@@ -240,52 +225,60 @@ export const flashcards = {
         
         console.log('Adding flashcard to deck:', deckId, newCard);
         
-        // Make sure the deck exists in the global data
-        if (!globalFlashcards[deckId]) {
-            globalFlashcards[deckId] = [];
-        }
+        // Add the flashcard to the specified deck
+        flashcardsStore.update(currentFlashcards => {
+            const updatedFlashcards = { ...currentFlashcards };
+            
+            // Make sure the deck exists in our flashcards object
+            if (!updatedFlashcards[deckId]) {
+                updatedFlashcards[deckId] = [];
+            }
+            
+            updatedFlashcards[deckId] = [...updatedFlashcards[deckId], newCard];
+            return updatedFlashcards;
+        });
         
-        // Add to global data
-        globalFlashcards[deckId] = [...globalFlashcards[deckId], newCard];
-        
-        // Update the store and save to localStorage
-        flashcardsStore.set(globalFlashcards);
-        saveToLocalStorage();
-        
-        // Update the deck's card count
-        const deckCards = globalFlashcards[deckId] || [];
+        // Update the card count in the deck
+        const currentFlashcards = flashcardsStore.refresh();
+        const deckCards = currentFlashcards[deckId] || [];
         decks.updateDeck(deckId, { cardCount: deckCards.length });
         
         return newCard;
     },
     
+    // Get all flashcards for a specific deck
     getFlashcardsByDeck: (deckId) => {
-        return globalFlashcards[deckId] || [];
+        const allFlashcards = flashcardsStore.refresh();
+        return allFlashcards[deckId] || [];
     },
     
+    // Delete a flashcard from a deck
     deleteFlashcard: (deckId, cardId) => {
         console.log('Deleting flashcard:', deckId, cardId);
         
-        // Make sure the deck exists
-        if (globalFlashcards[deckId]) {
-            // Delete from global data
-            globalFlashcards[deckId] = globalFlashcards[deckId].filter(
+        // Remove the flashcard
+        flashcardsStore.update(currentFlashcards => {
+            const updatedFlashcards = { ...currentFlashcards };
+            
+            // Make sure the deck exists
+            if (!updatedFlashcards[deckId]) {
+                return updatedFlashcards;
+            }
+            
+            updatedFlashcards[deckId] = updatedFlashcards[deckId].filter(
                 card => card.id !== cardId
             );
-            
-            // Update the store and save to localStorage
-            flashcardsStore.set(globalFlashcards);
-            saveToLocalStorage();
-            
-            // Update the deck's card count
-            const deckCards = globalFlashcards[deckId] || [];
-            decks.updateDeck(deckId, { cardCount: deckCards.length });
-        }
+            return updatedFlashcards;
+        });
+        
+        // Update the card count in the deck
+        const currentFlashcards = flashcardsStore.refresh();
+        const deckCards = currentFlashcards[deckId] || [];
+        decks.updateDeck(deckId, { cardCount: deckCards.length });
     },
     
+    // Reset to initial state
     reset: () => {
-        globalFlashcards = {...initialFlashcards};
-        flashcardsStore.set(globalFlashcards);
-        saveToLocalStorage();
+        flashcardsStore.set(initialFlashcards);
     }
 };
