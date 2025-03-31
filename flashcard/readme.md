@@ -174,6 +174,9 @@ python backend_minimal.py
 ./test_curl.sh
 ```
 
+## Screenshots
+See the screenshots in the Screenshot folder.
+
 ## Troubleshooting
 
 ### Backend Issues
